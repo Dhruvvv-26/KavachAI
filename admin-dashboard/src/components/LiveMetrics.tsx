@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import type { PaymentSummary, TriggerStatus } from '../lib/types'
 import { fetchTriggerStatus } from '../lib/api'
-import { formatDistanceToNow } from 'date-fns'
+import { safeFormatDistance } from '../lib/utils'
 
 const TREND_DATA = [
   { day: 'Mar 28', premiums: 184000, payouts: 118000 },
@@ -178,7 +178,7 @@ export default function LiveMetrics({
                     }}>T{t.tier}</span>
                   </td>
                   <td style={{ color: 'var(--text-2)', fontSize: 12 }}>
-                    {formatDistanceToNow(new Date(t.triggered_at), { addSuffix: true })}
+                    {safeFormatDistance(t.triggered_at)}
                   </td>
                 </tr>
               ))}

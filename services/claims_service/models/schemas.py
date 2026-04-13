@@ -69,6 +69,14 @@ class ClaimAdminReviewRequest(BaseModel):
         None, description="Admin note for audit trail"
     )
 
+class AdminAuditLogRequest(BaseModel):
+    """Log an administrative action."""
+    admin_username: str = Field(..., max_length=100)
+    action: str = Field(..., max_length=200)
+    entity_type: Optional[str] = Field(None, max_length=50)
+    entity_id: Optional[str] = Field(None, max_length=200)
+    metadata: Optional[dict] = Field(default_factory=dict)
+
 
 # ── Response Schemas ─────────────────────────────────────────────────────────
 

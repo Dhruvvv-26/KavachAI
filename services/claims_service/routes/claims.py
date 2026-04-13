@@ -14,11 +14,12 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select, and_, func, desc
+from sqlalchemy import select, and_, func, desc, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.claim import Claim, TriggerEvent, Zone, Worker
 from models.schemas import (
+    AdminAuditLogRequest,
     ClaimAdminReviewRequest,
     ClaimDetailResponse,
     ClaimListResponse,
@@ -328,6 +329,51 @@ async def admin_review_claim(
     await db.flush()
 
     return _claim_to_response(claim)
+
+
+@router.post(
+    "/admin/audit",
+    status_code=status.HTTP_201_CREATED,
+    summary="Log an administrative action",
+)
+async def log_admin_action(
+    payload: AdminAuditLogRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Log an entry into the admin_audit_log table.
+    Enforces the 'admin' schema requirement from the hackathon prompt.
+    """
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+
+    sql = text("""
+        INSERT INTO admin_audit_log (
+            admin_username, action, entity_type, entity_id, ip_address, user_agent, metadata
+        ) VALUES (
+            :username, :action, :e_type, :e_id, :ip, :ua, :metadata
+        )
+    """)
+
+    try:
+        await db.execute(sql, {
+            "username": payload.admin_username,
+            "action": payload.action,
+            "e_type": payload.entity_type,
+            "e_id": payload.entity_id,
+            "ip": ip_address,
+            "ua": user_agent,
+            "metadata": json.dumps(payload.metadata) if payload.metadata else json.dumps({})
+        })
+        await db.commit()
+    except Exception as e:
+        logger.error(f"Audit log failed: {e}")
+        # We don't fail the request if logging fails, but in production we might.
+        # For this hackathon, we'll return a 500 if the table doesn't exist.
+        raise HTTPException(status_code=500, detail=f"Audit logging failed: {e}")
+
+    return {"status": "logged"}
 
 
 # ── Dynamic route LAST ───────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
-import { formatDistanceToNow } from 'date-fns'
 import type { Claim } from '../lib/types'
-import { fetchClaims, approveClaim, blockClaim } from '../lib/api'
+import { fetchClaims, approveClaim, blockClaim, logAdminAction } from '../lib/api'
+import { safeFormatDistance } from '../lib/utils'
 
 function scoreColor(v: number) {
   if (v < 0.3) return 'var(--teal)'
@@ -85,6 +85,7 @@ export default function FraudQueue({ live }: { live: boolean }) {
   async function handleApprove(claimId: string) {
     setActing(claimId)
     await approveClaim(claimId)
+    await logAdminAction('CLAIM_APPROVE', 'claim', claimId, { status: 'auto_approved' })
     setClaims(prev => prev.map(c => c.claim_id === claimId ? { ...c, status: 'AUTO_APPROVED' } : c))
     setActing(null)
   }
@@ -92,6 +93,7 @@ export default function FraudQueue({ live }: { live: boolean }) {
   async function handleBlock(claimId: string) {
     setActing(claimId)
     await blockClaim(claimId)
+    await logAdminAction('CLAIM_BLOCK', 'claim', claimId, { status: 'rejected' })
     setClaims(prev => prev.map(c => c.claim_id === claimId ? { ...c, status: 'BLOCKED', payout_amount: 0 } : c))
     setActing(null)
   }
@@ -184,7 +186,7 @@ export default function FraudQueue({ live }: { live: boolean }) {
                       </span>
                     </td>
                     <td style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                      {formatDistanceToNow(new Date(claim.created_at), { addSuffix: true })}
+                      {safeFormatDistance(claim.created_at)}
                     </td>
                   </tr>
 

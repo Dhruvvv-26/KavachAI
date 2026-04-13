@@ -170,7 +170,12 @@ const MOCK_ZONES: Zone[] = [
 // ─── Exported API ─────────────────────────────────────────────────
 
 export async function fetchClaims() {
-  return get<Claim[]>(`${CL}/api/v1/claims?limit=50`, MOCK_CLAIMS)
+  const res = await get<any>(`${CL}/api/v1/claims?limit=50`, MOCK_CLAIMS)
+  // Handle case where backend returns { claims: [...] } instead of [...]
+  if (res.data && !Array.isArray(res.data) && (res.data as any).claims) {
+    res.data = (res.data as any).claims
+  }
+  return res as { data: Claim[]; live: boolean }
 }
 
 export async function fetchPaymentSummary() {
@@ -199,6 +204,17 @@ export async function blockClaim(claimId: string) {
 
 export async function holdClaim(claimId: string, reason?: string) {
   return post<{ status: string }>(`${CL}/api/v1/claims/admin/review/${claimId}`, { action: 'release_hold', reviewer_note: reason }, { status: 'soft_hold' })
+}
+
+export async function logAdminAction(action: string, entityType?: string, entityId?: string, metadata: any = {}) {
+  const admin_username = 'admin_adhoc' // In a real app, get from session
+  return post<{ status: string }>(`${CL}/api/v1/claims/admin/audit`, {
+    admin_username,
+    action,
+    entity_type: entityType,
+    entity_id: entityId,
+    metadata
+  }, { status: 'logged' })
 }
 
 export async function fetchExclusions() {

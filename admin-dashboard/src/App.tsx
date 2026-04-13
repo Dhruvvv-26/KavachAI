@@ -128,6 +128,8 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+import LoginGate from './components/LoginGate'
+
 export default function App() {
   const [summary, setSummary] = useState<PaymentSummary | null>(null)
   const [triggerStatus, setTriggerStatus] = useState<TriggerStatus | null>(null)
@@ -149,19 +151,21 @@ export default function App() {
   const pendingClaims = summary?.claims_pending ?? 0
 
   return (
-    <div className="shell">
-      <Topbar live={live} triggerStatus={triggerStatus} />
-      <Sidebar softHolds={softHolds} pendingClaims={pendingClaims} />
-      <main className="main">
-        <Routes>
-          <Route path="/" element={<LiveMetrics summary={summary} triggerStatus={triggerStatus} live={live} />} />
-          <Route path="/fraud-queue" element={<FraudQueue live={live} />} />
-          <Route path="/dual-selfie" element={<DualSelfieCheck live={live} />} />
-          <Route path="/shap" element={<SHAPWaterfall live={live} />} />
-          <Route path="/zones" element={<ZoneHeatmap live={live} />} />
-          <Route path="/actuarial" element={<ActuarialDashboard live={live} />} />
-        </Routes>
-      </main>
-    </div>
+    <LoginGate>
+      <div className="shell">
+        <Topbar live={live} triggerStatus={triggerStatus} />
+        <Sidebar softHolds={softHolds} pendingClaims={pendingClaims} />
+        <main className="main">
+          <Routes>
+            <Route path="/" element={<LiveMetrics summary={summary} triggerStatus={triggerStatus} live={live} />} />
+            <Route path="/fraud-queue" element={<FraudQueue live={live} />} />
+            <Route path="/dual-selfie" element={<DualSelfieCheck live={live} />} />
+            <Route path="/shap" element={<SHAPWaterfall live={live} />} />
+            <Route path="/zones" element={<ZoneHeatmap live={live} />} />
+            <Route path="/actuarial" element={<ActuarialDashboard live={live} />} />
+          </Routes>
+        </main>
+      </div>
+    </LoginGate>
   )
 }

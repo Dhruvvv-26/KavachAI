@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
-import { formatDistanceToNow } from 'date-fns'
 import type { Claim } from '../lib/types'
 import { fetchClaims, approveClaim, blockClaim } from '../lib/api'
+import { safeFormatDistance } from '../lib/utils'
 
 function PhysicsReadout({ scores }: { scores: Claim['layer_scores'] }) {
   const checks = [
@@ -51,7 +51,7 @@ function SelfieCard({ claim, onApprove, onBlock }: {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
           <div className="selfie-placeholder">
             <div className="selfie-face">📸</div>
-            <div style={{ fontSize: 10, textAlign: 'center' }}>Claim-time selfie<br />{formatDistanceToNow(new Date(claim.created_at), { addSuffix: true })}</div>
+            <div style={{ fontSize: 10, textAlign: 'center' }}>Claim-time selfie<br />{safeFormatDistance(claim.created_at)}</div>
           </div>
           <div className="selfie-placeholder">
             <div className="selfie-face">🪪</div>

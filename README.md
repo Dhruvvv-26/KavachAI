@@ -487,8 +487,8 @@ Zone:       delhi_rohini  |  centroid lat=28.7300, lon=77.1150
 
 | Deliverable | Target Criteria | Status |
 |---|---|---|
-| Admin Dashboard — React + Vite + Leaflet + CartoDB | Fraud queue, SHAP waterfall charts, Dual-Selfie visual queue, zone heatmap | 🔄 In progress |
-| NetworkX Louvain clique detection | 150+ rider fraud ring identified within 30s of burst submission | 🔄 In progress |
+| Admin Dashboard — React + Vite + Leaflet + CartoDB | Fraud queue, SHAP waterfall charts, Dual-Selfie visual queue, zone heatmap | ✅ Live |
+| NetworkX Louvain clique detection | 150+ rider fraud ring identified within 30s of burst submission | ✅ Live |
 | Additional LSTM training data | 3 years historical CPCB + OpenWeatherMap; test AUC > 0.95 per zone | 🔄 Training |
 | Railway.app + Vercel deployment | Public HTTPS URL; judges run without local setup | 🔄 Pending |
 | 5-minute pitch video + final deck | Recorded E2E: trigger → fraud check → payout on physical phone | 🔄 Pending |
@@ -517,8 +517,9 @@ curl -s https://kavachai-policy-service-production.up.railway.app/api/v1/policie
 curl -s https://kavachai-payment-service-production.up.railway.app/api/v1/payments/summary | python3 -m json.tool
 ```
 
-> **Admin Dashboard**: Visit [https://kavachai-admin.vercel.app](https://kavachai-admin.vercel.app)
-> Navigate to Fraud Queue, SHAP Explainer, Zone Heatmap, and Actuarial Dashboard.
+> **Admin Dashboard (Vercel)**: Visit [https://kavachai-admin.vercel.app](https://kavachai-admin.vercel.app)
+>   *   *Login:* Use passcode `kavach2026`
+>   *   Navigate to Fraud Queue, SHAP Explainer, Zone Heatmap, and Actuarial Dashboard.
 
 ### 🐳 Option B — Full Local Setup (Docker)
 
@@ -581,6 +582,9 @@ You are looking for every service to return `"status": "healthy"`.
 ### Step 4 — Accessing the Observability GUIs
 
 Before running transactions, you can visually inspect the infrastructure:
+*   **Admin Dashboard (Phase 3 Command Center):** `http://localhost:3000` (started via docker-compose)
+    *   *Login:* Use passcode `kavach2026`
+    *   *Alternative Local Startup:* If not using Docker for the frontend, run `cd admin-dashboard && npm install && npm run dev`
 *   **Redpanda Console (Message Broker GUI):** `http://localhost:8080`
     *   *Verify the topics exist:* `raw.trigger.events`, `processed.trigger.events`, `claims.approved`
 *   **Grafana (Metrics Dashboard):** `http://localhost:3001`
@@ -823,13 +827,18 @@ Viable from 1,000 riders. Real-time loss ratio tracking at `GET /api/v1/payments
 
 ---
 
-## 13. Working Prototype
+## 13. Administrative Control Hub (Phase 3)
 
-**File:** `Prototype/KavachAI_Prototype.html`
+The legacy HTML prototype has been completely replaced by a production-ready **React + Vite** administrative command center, providing real-time observability across the parametric pipeline.
 
-Open in any modern browser — zero server, zero dependencies, zero install.
+**Core Capabilities:**
+- **Live Metrics**: KPI cards, trend charts, and active trigger tracking with immediate status.
+- **Fraud Queue**: Live claim review dashboard with per-layer score breakdown (GPS, Device, Network, Behavior). Allows manual review of `SOFT_HOLD` claims.
+- **SHAP Waterfall Explainer**: Interactive premium explainer rendering the 13 feature contributions (e.g., historical AQI, disruption history) to visually prove actuarial fairness.
+- **Zone Heatmap**: Leaflet + CartoDB dark tiles providing a physical overlay of active zone risk and trigger concentration.
+- **NetworkX Louvain Detection**: Defends against organized rings by rendering and processing 150+ rider fraud rings identified within 30s of a burst submission.
 
-Demonstrates: rider registration with zone and vehicle selection, live rule-based premium calculator with component breakdown, simulated trigger dashboard (AQI / rain / heat / cyclone / curfew), payout history ledger, fraud score gauge for a flagged claim, coverage tier comparison (Basic / Standard / Premium). Mobile-responsive, design-consistent with the React Native app.
+The dashboard integrates directly with the 6 FastAPI microservices. A fallback demo mode is also automatically engaged, allowing judges to fully evaluate the UI capabilities without installing the backend dependencies.
 
 ---
 
@@ -838,7 +847,7 @@ Demonstrates: rider registration with zone and vehicle selection, live rule-base
 | Category | Technology | Phase 2 Status |
 |---|---|---|
 | Worker App | React Native + Expo Go | ✅ Live — physical sensor capture (GPS, accel, gyro) |
-| Admin Dashboard | React + Vite + Leaflet + CartoDB | 🔄 Phase 3 — fraud queue, SHAP, Dual-Selfie |
+| Admin Dashboard | React + Vite + Leaflet + CartoDB | ✅ Live — fraud queue, SHAP, Dual-Selfie, Heatmap |
 | Backend | Python FastAPI | ✅ Live — 6 async microservices with auto-generated OpenAPI |
 | Premium ML | XGBoost + LightGBM ensemble | ✅ Live — `xgb_premium.pkl` + `lgbm_premium.pkl` serving |
 | Fraud ML | 4× Isolation Forest + GradientBoosting | ✅ Live — all 5 fraud models loaded and serving |

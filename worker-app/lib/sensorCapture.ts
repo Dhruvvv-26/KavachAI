@@ -15,7 +15,7 @@ import * as Location from 'expo-location';
 import { Accelerometer, Gyroscope } from 'expo-sensors';
 import * as Device from 'expo-device';
 import axios from 'axios';
-import api from './api';
+import { sendSensorPing } from './api';
 
 interface GpsPing {
   lat: number;
@@ -74,7 +74,7 @@ export async function captureSensorData(workerId: string): Promise<void> {
     };
 
     // Submit to Claims Service
-    await api.claims.post(`/api/v1/claims/sensor_data/${workerId}`, payload);
+    await sendSensorPing(payload);
     console.log('[SensorSDK] Sensor data submitted successfully');
 
   } catch (error) {
@@ -219,7 +219,7 @@ async function submitPartialData(workerId: string): Promise<void> {
   };
 
   try {
-    await api.claims.post(`/api/v1/claims/sensor_data/${workerId}`, payload);
+    await sendSensorPing(payload);
     console.log('[SensorSDK] Partial sensor data submitted');
   } catch (error) {
     console.error('[SensorSDK] Failed to submit partial data:', error);
