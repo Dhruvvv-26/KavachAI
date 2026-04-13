@@ -25,6 +25,7 @@ class FraudRequest(BaseModel):
     claims_in_window_same_zone: int = Field(default=5, example=6)
     month: int = Field(default=6, ge=1, le=12, example=7)
     is_monsoon: int = Field(default=0, ge=0, le=1, example=1)
+    is_mobility_grace: int = Field(default=0, ge=0, le=1, example=0)
 
 
 class FraudResponse(BaseModel):
@@ -34,6 +35,7 @@ class FraudResponse(BaseModel):
     decision: str
     model_version: str
     flags: list[str]
+    mobility_grace_penalty: float = 0.0
 
 
 @router.post("/score", response_model=FraudResponse)
@@ -68,6 +70,11 @@ async def score_fraud(req: FraudRequest):
     # Combined: 40% IsoForest + 60% GB
     combined = round(0.40 * iso_score + 0.60 * gb_score, 4)
 
+    # Mobility grace penalty: +0.04 for cross-zone workers (additive, capped at 1.0)
+    mobility_grace_penalty = 0.04 if req.is_mobility_grace == 1 else 0.0
+    if mobility_grace_penalty > 0:
+        combined = round(min(1.0, combined + mobility_grace_penalty), 4)
+
     # Decision routing
     if combined >= 0.85:
         decision = "blocked"
@@ -78,6 +85,8 @@ async def score_fraud(req: FraudRequest):
 
     # Generate flags
     flags = []
+    if req.is_mobility_grace == 1:
+        flags.append("MOBILITY_GRACE_PENALTY_APPLIED")
     if req.mock_location_enabled == 1:
         flags.append("MOCK_LOCATION_DETECTED")
     if req.gps_cold_start_ms < 500:
@@ -100,6 +109,7 @@ async def score_fraud(req: FraudRequest):
         decision=decision,
         model_version="isoforest_gb_v1",
         flags=flags,
+        mobility_grace_penalty=mobility_grace_penalty,
     )
 
 
@@ -126,6 +136,12 @@ def _rule_based_fraud(req: FraudRequest) -> FraudResponse:
 
     score = min(1.0, score)
 
+    # Mobility grace penalty
+    mobility_grace_penalty = 0.04 if req.is_mobility_grace == 1 else 0.0
+    if mobility_grace_penalty > 0:
+        score = min(1.0, score + mobility_grace_penalty)
+        flags.append("MOBILITY_GRACE_PENALTY_APPLIED")
+
     if score >= 0.85:
         decision = "blocked"
     elif score >= 0.65:
@@ -140,4 +156,5 @@ def _rule_based_fraud(req: FraudRequest) -> FraudResponse:
         decision=decision,
         model_version="rule_based_fallback",
         flags=flags,
+        mobility_grace_penalty=mobility_grace_penalty,
     )

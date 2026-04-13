@@ -178,6 +178,8 @@ class FraudScoringEngine:
                     flags.append("FAIL_CLOSED_GEO_UNAVAILABLE")
                     logger.warning(f"Fail-Closed override: {worker_id} held for review — IP geolocation was unavailable")
 
+                # Mobility grace penalty (additive, visible in SHAP output)
+                result = self._apply_mobility_grace_penalty(result, sensor, flags)
                 return result
 
             except Exception as e:
@@ -234,6 +236,8 @@ class FraudScoringEngine:
             flags.append("FAIL_CLOSED_GEO_UNAVAILABLE")
             logger.warning(f"Fail-Closed override: {worker_id} held for review — IP geolocation was unavailable")
 
+        # Mobility grace penalty (additive, visible in SHAP output)
+        result = self._apply_mobility_grace_penalty(result, sensor, flags)
         return result
 
     def _ml_score_claim(self, sensor: dict, flags: list, ip_result: dict) -> dict:
@@ -676,6 +680,40 @@ class FraudScoringEngine:
             score += 0.1
 
         return min(1.0, score)
+
+    def _apply_mobility_grace_penalty(
+        self,
+        result: dict,
+        sensor: dict,
+        flags: list[str],
+    ) -> dict:
+        """
+        Apply additive fraud score penalty for mobility_grace claims.
+
+        Workers matched via cross-zone GPS pings (mobility_grace) receive
+        a fixed +0.04 penalty to their fraud score. This makes the feature
+        visible in the SHAP breakdown and demo output.
+
+        The penalty is additive and capped at 1.0.
+        """
+        zone_match_type: str = sensor.get("zone_match_type", "primary")
+        mobility_grace_penalty: float = 0.04 if zone_match_type == "mobility_grace" else 0.0
+
+        result["zone_match_type"] = zone_match_type
+        result["mobility_grace_penalty"] = mobility_grace_penalty
+
+        if mobility_grace_penalty > 0:
+            result["total_score"] = round(
+                min(1.0, result["total_score"] + mobility_grace_penalty), 4
+            )
+            flags.append("MOBILITY_GRACE_APPLIED")
+            # Re-evaluate decision thresholds after penalty
+            if result["total_score"] >= 0.85:
+                result["decision"] = "blocked"
+            elif result["total_score"] >= 0.65:
+                result["decision"] = "soft_hold"
+
+        return result
 
     @staticmethod
     def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
