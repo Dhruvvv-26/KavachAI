@@ -46,11 +46,11 @@ export default function FraudQueue() {
 
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-value" style={{ color: '#FFB74D' }}>{softHoldCount}</div>
+          <div className="stat-value" style={{ color: 'var(--accent)' }}>{softHoldCount}</div>
           <div className="stat-label">Soft Holds</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value" style={{ color: '#FF5252' }}>{blockedCount}</div>
+          <div className="stat-value" style={{ color: '#52525B' }}>{blockedCount}</div>
           <div className="stat-label">Blocked</div>
         </div>
         <div className="stat-card">
@@ -80,20 +80,20 @@ export default function FraudQueue() {
                 <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{claim.id}</td>
                 <td>
                   <div>{claim.workerName}</div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{claim.workerId}</div>
+                  <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{claim.workerId}</div>
                 </td>
                 <td>
                   <div>{claim.zone.replace(/_/g, ' ')}</div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{claim.city}</div>
+                  <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{claim.city}</div>
                 </td>
                 <td>
                   <span className={`badge badge-${claim.tier}`}>{claim.tier}</span>
-                  <div style={{ color: 'var(--text-dim)', fontSize: 11, marginTop: 2 }}>{claim.triggerType}</div>
+                  <div style={{ color: 'var(--text-2)', fontSize: 11, marginTop: 2 }}>{claim.triggerType}</div>
                 </td>
                 <td style={{ fontWeight: 600 }}>₹{claim.amount}</td>
                 <td>
                   <span style={{
-                    color: claim.fraudScore >= 0.85 ? '#FF5252' : claim.fraudScore >= 0.65 ? '#FFB74D' : '#00E676',
+                    color: claim.fraudScore >= 0.85 ? '#3F3F46' : claim.fraudScore >= 0.65 ? '#52525B' : 'var(--accent)',
                     fontWeight: 700,
                     fontSize: 16,
                   }}>
@@ -105,8 +105,8 @@ export default function FraudQueue() {
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 200 }}>
                     {claim.flags.map((flag, i) => (
                       <span key={i} style={{
-                        background: 'rgba(255, 82, 82, 0.1)',
-                        color: '#FF8A80',
+                        background: 'rgba(124, 124, 255, 0.08)',
+                        color: 'var(--accent)',
                         padding: '2px 6px',
                         borderRadius: 4,
                         fontSize: 10,

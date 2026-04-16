@@ -1,8 +1,18 @@
 import { useEffect, useState } from 'react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts'
+import {
+  Ban,
+  CircleDollarSign,
+  FileSearch,
+  HandCoins,
+  ShieldCheck,
+  Wallet,
+} from 'lucide-react'
 import type { PaymentSummary, TriggerStatus } from '../lib/types'
-import { fetchTriggerStatus } from '../lib/api'
 import { formatDistanceToNow } from 'date-fns'
+import ChartCard from './ui/ChartCard'
+import Badge from './ui/Badge'
+import GlassCard from './ui/GlassCard'
 
 const TREND_DATA = [
   { day: 'Mar 28', premiums: 184000, payouts: 118000 },
@@ -23,28 +33,61 @@ function fmt(n: number) {
   return `₹${n}`
 }
 
-function ScoreGauge({ value, label }: { value: number; label: string }) {
-  const color = value < 0.5 ? 'var(--teal)' : value < 0.75 ? 'var(--amber)' : 'var(--red)'
-  const pct = Math.round(value * 100)
-  const r = 36, cx = 44, cy = 44
-  const circ = 2 * Math.PI * r
-  const dash = circ * (1 - value)
+function pctChange(current: number, previous: number) {
+  if (previous === 0) return 0
+  return ((current - previous) / previous) * 100
+}
+
+function HealthBar({ value, label }: { value: number; label: string }) {
+  const clamped = Math.max(0, Math.min(1, value))
+  const color = clamped >= 0.75 ? 'var(--accent)' : '#52525B'
+  const pct = Math.round(clamped * 100)
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-      <svg width={88} height={88} viewBox="0 0 88 88">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--bg-base)" strokeWidth={8} />
-        <circle
-          cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={8}
-          strokeDasharray={circ} strokeDashoffset={dash}
-          strokeLinecap="round"
-          style={{ transform: 'rotate(-90deg)', transformOrigin: '44px 44px', transition: 'stroke-dashoffset 1s' }}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+        <span style={{ color: 'var(--text-2)' }}>{label}</span>
+        <span className="mono" style={{ color, fontWeight: 600 }}>{pct}%</span>
+      </div>
+      <div style={{ height: 7, background: 'rgba(255,255,255,0.06)', borderRadius: 999, overflow: 'hidden' }}>
+        <div
+          style={{
+            height: '100%',
+            width: `${pct}%`,
+            background: color,
+            borderRadius: 999,
+            transition: 'width 260ms ease',
+          }}
         />
-        <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central"
-          fill={color} fontSize={16} fontWeight={700} fontFamily="IBM Plex Mono">
-          {pct}%
-        </text>
-      </svg>
-      <div style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
+      </div>
+    </div>
+  )
+}
+
+function HeroStat({ label, value, delta }: { label: string; value: string; delta?: string }) {
+  return (
+    <div className="hero-stat">
+      <div className="hero-stat-label">{label}</div>
+      <div className="hero-stat-value">{value}</div>
+      {delta ? <div className="hero-stat-delta">{delta}</div> : null}
+    </div>
+  )
+}
+
+function InlineMetric({ label, value, delta }: { label: string; value: string; delta?: string }) {
+  return (
+    <div className="inline-metric">
+      <div className="inline-metric-label">{label}</div>
+      <div className="inline-metric-value">{value}</div>
+      {delta ? <div className="inline-metric-delta">{delta}</div> : null}
+    </div>
+  )
+}
+
+function InsightRow({ label, value, tone = 'neutral' }: { label: string; value: string; tone?: 'neutral' | 'positive' | 'warning' | 'critical' }) {
+  return (
+    <div className={`insight-row ${tone}`.trim()}>
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   )
 }
@@ -62,120 +105,111 @@ export default function LiveMetrics({
   }
 
   const pctSaved = s.fraud_blocks_24h > 0 ? Math.round((s.fraud_blocks_24h / (s.fraud_blocks_24h + s.auto_approved_24h)) * 100) : 0
+  const firstTrend = TREND_DATA[0]
+  const lastTrend = TREND_DATA[TREND_DATA.length - 1]
+  const premiumTrend = pctChange(lastTrend.premiums, firstTrend.premiums)
+  const payoutTrend = pctChange(lastTrend.payouts, firstTrend.payouts)
+  const lossDelta = ((s.loss_ratio - 0.7) * 100).toFixed(1)
 
   return (
     <>
-      <div className="page-header">
-        <div className="page-title">Live Metrics</div>
-        <div className="page-sub">Real-time financial health and fraud prevention — KavachAI Phase 3</div>
-      </div>
-
       {!live && (
         <div className="demo-banner">
           ⚡ Demo mode — showing realistic mock data. Start the Docker stack to stream live metrics.
         </div>
       )}
 
-      <div className="metrics-grid">
-        <div className="metric-card teal">
-          <div className="metric-label">Total Premiums</div>
-          <div className="metric-value">{fmt(s.total_premiums)}</div>
-          <div className="metric-sub">Collected this period</div>
+      <GlassCard className="hero-shell">
+        <div className="hero-copy">
+          <div className="hero-kicker">Live Metrics</div>
+          <h1 className="hero-title">Live Metrics</h1>
+          <p className="hero-subtitle">
+            Real-time portfolio health, claim velocity, and fraud prevention performance across the active parametric stack.
+          </p>
         </div>
-        <div className="metric-card amber">
-          <div className="metric-label">Total Payouts</div>
-          <div className="metric-value">{fmt(s.total_payouts)}</div>
-          <div className="metric-sub">Disbursed to riders</div>
+        <div className="hero-stats">
+          <HeroStat label="Premiums" value={fmt(s.total_premiums)} delta={`${premiumTrend >= 0 ? '+' : ''}${premiumTrend.toFixed(1)}%`} />
+          <HeroStat label="Payouts" value={fmt(s.total_payouts)} delta={`${payoutTrend >= 0 ? '+' : ''}${payoutTrend.toFixed(1)}%`} />
+          <HeroStat label="Loss Ratio" value={`${(s.loss_ratio * 100).toFixed(1)}%`} delta={s.loss_ratio < 0.7 ? 'Below target' : 'Above target'} />
         </div>
-        <div className="metric-card" style={{ borderTopColor: s.loss_ratio < 0.7 ? 'var(--teal)' : 'var(--red)' }}>
-          <div className="metric-label">Loss Ratio</div>
-          <div className="metric-value" style={{ color: s.loss_ratio < 0.7 ? 'var(--teal)' : 'var(--red)' }}>
-            {(s.loss_ratio * 100).toFixed(1)}%
-          </div>
-          <div className="metric-sub">Target: &lt;70% — IRDAI parametric standard</div>
-        </div>
-        <div className="metric-card blue">
-          <div className="metric-label">Active Policies</div>
-          <div className="metric-value">{s.active_policies}</div>
-          <div className="metric-sub">Weekly coverage live</div>
-        </div>
-        <div className="metric-card red">
-          <div className="metric-label">Fraud Blocks (24h)</div>
-          <div className="metric-value">{s.fraud_blocks_24h}</div>
-          <div className="metric-sub">{pctSaved}% of submissions blocked</div>
-        </div>
-        <div className="metric-card purple">
-          <div className="metric-label">Claims Pending</div>
-          <div className="metric-value">{s.claims_pending}</div>
-          <div className="metric-sub">Awaiting manual review</div>
-        </div>
+      </GlassCard>
+
+      <div className="metric-strip">
+        <InlineMetric label="Total Premiums" value={fmt(s.total_premiums)} delta={`${premiumTrend >= 0 ? '+' : ''}${premiumTrend.toFixed(1)}%`} />
+        <InlineMetric label="Total Payouts" value={fmt(s.total_payouts)} delta={`${payoutTrend >= 0 ? '+' : ''}${payoutTrend.toFixed(1)}%`} />
+        <InlineMetric label="Loss Ratio" value={`${(s.loss_ratio * 100).toFixed(1)}%`} delta={`${lossDelta}% from target`} />
+        <InlineMetric label="Active Policies" value={s.active_policies.toString()} delta="+3.8% this month" />
+        <InlineMetric label="Fraud Blocks" value={s.fraud_blocks_24h.toString()} delta={`${pctSaved}% blocked`} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16 }}>
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Premium vs Payout Trend (10-day)</div>
-          </div>
-          <ResponsiveContainer width="100%" height={220}>
+      <div className="live-metrics-layout">
+        <div className="live-metrics-main">
+          <ChartCard title="Premium vs Payout Trend" subtitle="Financial throughput and claims disbursement velocity">
+            <ResponsiveContainer width="100%" height={360}>
             <AreaChart data={TREND_DATA} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gPrem" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#00C9B1" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#00C9B1" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gPay" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="day" tick={{ fill: '#3D5A78', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={v => fmt(v)} tick={{ fill: '#3D5A78', fontSize: 11 }} axisLine={false} tickLine={false} width={56} />
+              <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 5" vertical={false} />
+              <XAxis dataKey="day" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} dy={10} />
+              <YAxis tickFormatter={v => fmt(v)} tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} width={56} />
               <Tooltip
-                contentStyle={{ background: '#121F35', border: '1px solid rgba(0,201,177,0.2)', borderRadius: 8, fontSize: 12 }}
-                labelStyle={{ color: '#7A9CC0' }}
+                contentStyle={{
+                  background: 'rgba(15,23,42,0.9)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  backdropFilter: 'blur(18px)',
+                  borderRadius: 16,
+                  fontSize: 12,
+                }}
+                labelStyle={{ color: '#9CA3AF' }}
                 formatter={(v: number) => [fmt(v), '']}
               />
-              <Area type="monotone" dataKey="premiums" stroke="#00C9B1" strokeWidth={2} fill="url(#gPrem)" name="Premiums" />
-              <Area type="monotone" dataKey="payouts" stroke="#F59E0B" strokeWidth={2} fill="url(#gPay)" name="Payouts" />
-              <Legend wrapperStyle={{ fontSize: 12, color: '#7A9CC0', paddingTop: 8 }} />
+              <Area type="monotone" dataKey="premiums" stroke="#7C7CFF" strokeWidth={2.5} fill="rgba(124,124,255,0.12)" name="Premiums" />
+              <Area type="monotone" dataKey="payouts" stroke="#52525B" strokeWidth={2.5} fill="rgba(82,82,91,0.12)" name="Payouts" />
+              <Legend wrapperStyle={{ fontSize: 12, color: '#9CA3AF', paddingTop: 12 }} iconType="circle" />
             </AreaChart>
           </ResponsiveContainer>
+          </ChartCard>
         </div>
 
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="card-header" style={{ marginBottom: 4 }}>
-            <div className="card-title">Health Gauges</div>
-          </div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <ScoreGauge value={s.loss_ratio} label="Loss ratio" />
-            <ScoreGauge value={s.fraud_blocks_24h / (s.fraud_blocks_24h + s.auto_approved_24h + 0.01)} label="Fraud rate" />
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-2)', textAlign: 'center', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-            Operating margin: {fmt(s.total_premiums - s.total_payouts)}
-          </div>
+        <div className="live-metrics-side">
+          <GlassCard className="side-panel">
+            <div className="panel-title">Portfolio Health</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <HealthBar value={s.loss_ratio} label="Loss ratio" />
+              <HealthBar value={s.fraud_blocks_24h / (s.fraud_blocks_24h + s.auto_approved_24h + 0.01)} label="Fraud rate" />
+            </div>
+            <div className="panel-foot">Operating margin {fmt(s.total_premiums - s.total_payouts)}</div>
+          </GlassCard>
+
+          <GlassCard className="side-panel">
+            <div className="panel-title">Small Insights</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <InsightRow label="Claims pending" value={s.claims_pending.toString()} tone="warning" />
+              <InsightRow label="Approved (24h)" value={s.auto_approved_24h.toString()} tone="positive" />
+              <InsightRow label="Soft holds" value={s.soft_holds_24h.toString()} tone="neutral" />
+              <InsightRow label="Fraud blocks" value={s.fraud_blocks_24h.toString()} tone="critical" />
+            </div>
+          </GlassCard>
         </div>
       </div>
 
       {ts?.active_triggers?.length ? (
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Active Triggers Now</div>
-            <span className="badge badge-amber">LIVE</span>
+        <GlassCard className="table-shell">
+          <div className="table-header">
+            <div>
+              <div className="panel-title">Active Triggers Now</div>
+              <div className="panel-subtitle">Live event feed with parametric thresholds and escalation timing</div>
+            </div>
+            <Badge variant="warn">LIVE</Badge>
           </div>
           <table className="data-table">
             <thead><tr><th>Zone</th><th>Event</th><th>Metric</th><th>Tier</th><th>Age</th></tr></thead>
             <tbody>
               {ts.active_triggers.map((t, i) => (
                 <tr key={i}>
-                  <td><span className="mono" style={{ color: 'var(--teal)' }}>{t.zone}</span></td>
-                  <td><span className="badge badge-amber">{t.event_type.toUpperCase()}</span></td>
+                  <td><span className="mono" style={{ color: 'var(--accent)' }}>{t.zone}</span></td>
+                  <td><Badge variant="info">{t.event_type.toUpperCase()}</Badge></td>
                   <td><span className="mono">{t.metric_value}</span></td>
                   <td>
-                    <span className="badge" style={{
-                      background: t.tier === 3 ? 'var(--red-glow)' : t.tier === 2 ? 'var(--amber-glow)' : 'var(--teal-glow)',
-                      color: t.tier === 3 ? 'var(--red)' : t.tier === 2 ? 'var(--amber)' : 'var(--teal)',
-                      border: `1px solid ${t.tier === 3 ? 'var(--red)' : t.tier === 2 ? 'var(--amber)' : 'var(--teal)'}`,
-                    }}>T{t.tier}</span>
+                    <Badge variant="info">T{t.tier}</Badge>
                   </td>
                   <td style={{ color: 'var(--text-2)', fontSize: 12 }}>
                     {formatDistanceToNow(new Date(t.triggered_at), { addSuffix: true })}
@@ -184,7 +218,7 @@ export default function LiveMetrics({
               ))}
             </tbody>
           </table>
-        </div>
+        </GlassCard>
       ) : null}
     </>
   )

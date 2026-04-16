@@ -1,94 +1,46 @@
 import { useEffect, useState } from 'react'
+import { Activity, ChartNoAxesCombined, NotebookText, Shield, WalletCards } from 'lucide-react'
 import { fetchPaymentSummary } from '../lib/api'
 import type { PaymentSummary } from '../lib/types'
+import StatCard from './ui/StatCard'
+import Badge from './ui/Badge'
+import ChartCard from './ui/ChartCard'
 
 const BCR_COLORS = {
-  SOLVENT: { bg: 'rgba(0, 255, 135, 0.08)', border: '#00ff87', text: '#00ff87', label: 'SOLVENT' },
-  WATCH:   { bg: 'rgba(255, 193, 7, 0.08)',  border: '#ffc107', text: '#ffc107', label: 'WATCH' },
-  CRITICAL:{ bg: 'rgba(255, 77, 77, 0.08)',   border: '#ff4d4d', text: '#ff4d4d', label: 'CRITICAL' },
+  SOLVENT: { bg: 'rgba(124, 124, 255, 0.08)', border: '#7C7CFF', text: '#7C7CFF', label: 'SOLVENT' },
+  WATCH:   { bg: 'rgba(82, 82, 91, 0.14)', border: '#52525B', text: '#A1A1AA', label: 'WATCH' },
+  CRITICAL:{ bg: 'rgba(82, 82, 91, 0.14)', border: '#52525B', text: '#A1A1AA', label: 'CRITICAL' },
 } as const
-
-function MetricCard({ title, value, subtitle, color, icon }: {
-  title: string
-  value: string
-  subtitle: string
-  color: string
-  icon: string
-}) {
-  return (
-    <div style={{
-      background: 'var(--surface)',
-      borderRadius: 12,
-      padding: '20px 24px',
-      border: '1px solid var(--border)',
-      flex: '1 1 220px',
-      minWidth: 220,
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
-      <div style={{ position: 'absolute', top: 12, right: 16, fontSize: 28, opacity: 0.15 }}>{icon}</div>
-      <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
-        {title}
-      </div>
-      <div style={{ fontSize: 28, fontWeight: 700, color, fontFamily: 'var(--font-mono)', lineHeight: 1 }}>
-        {value}
-      </div>
-      <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 6 }}>
-        {subtitle}
-      </div>
-    </div>
-  )
-}
 
 function BCRGauge({ bcr, status }: { bcr: number; status: string }) {
   const colors = BCR_COLORS[status as keyof typeof BCR_COLORS] || BCR_COLORS.SOLVENT
-  const angle = Math.min(bcr / 100 * 180, 180)
+  const pct = Math.max(0, Math.min(bcr, 100))
 
   return (
-    <div style={{
-      background: colors.bg,
-      border: `1px solid ${colors.border}`,
-      borderRadius: 16,
-      padding: '28px 32px',
-      flex: '1 1 320px',
-      minWidth: 320,
-      textAlign: 'center',
-    }}>
-      <div style={{ fontSize: 12, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 12 }}>
+    <div className="card" style={{ padding: 22, minWidth: 300, borderColor: colors.border, background: colors.bg }}>
+      <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
         Burning Cost Rate (30-Day)
       </div>
 
-      {/* SVG Gauge */}
-      <svg viewBox="0 0 200 110" width="200" height="110" style={{ margin: '0 auto', display: 'block' }}>
-        {/* Background arc */}
-        <path
-          d="M 20 100 A 80 80 0 0 1 180 100"
-          fill="none"
-          stroke="var(--border)"
-          strokeWidth="10"
-          strokeLinecap="round"
+      <div style={{ fontSize: 35, fontWeight: 700, color: colors.text, fontFamily: 'var(--font-mono)' }}>
+        {bcr.toFixed(1)}%
+      </div>
+
+      <div style={{ marginTop: 12, height: 8, borderRadius: 999, overflow: 'hidden', background: 'rgba(15,23,42,0.85)' }}>
+        <div
+          style={{
+            width: `${pct}%`,
+            height: '100%',
+            borderRadius: 999,
+            background: colors.text,
+            transition: 'width 300ms ease',
+          }}
         />
-        {/* Value arc */}
-        <path
-          d={`M 20 100 A 80 80 0 ${angle > 90 ? 1 : 0} 1 ${100 + 80 * Math.cos(Math.PI - (angle * Math.PI / 180))} ${100 - 80 * Math.sin((angle * Math.PI / 180))}`}
-          fill="none"
-          stroke={colors.border}
-          strokeWidth="10"
-          strokeLinecap="round"
-          style={{ transition: 'all 0.8s ease-out' }}
-        />
-        {/* Value text */}
-        <text x="100" y="90" textAnchor="middle" fill={colors.text} fontSize="24" fontWeight="700" fontFamily="var(--font-mono)">
-          {bcr.toFixed(1)}%
-        </text>
-        {/* Labels */}
-        <text x="25" y="108" fontSize="9" fill="var(--text-3)">0%</text>
-        <text x="170" y="108" fontSize="9" fill="var(--text-3)">100%</text>
-      </svg>
+      </div>
 
       <div style={{
         display: 'inline-block',
-        marginTop: 8,
+        marginTop: 14,
         padding: '4px 14px',
         borderRadius: 20,
         background: colors.bg,
@@ -125,7 +77,7 @@ export default function ActuarialDashboard({ live }: { live: boolean }) {
 
   if (loading || !summary) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-3)' }}>
+      <div className="loading-wrap" style={{ minHeight: '60vh' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 32, marginBottom: 8, animation: 'pulse-dot 1s ease-in-out infinite' }}>◈</div>
           Loading actuarial data...
@@ -135,109 +87,61 @@ export default function ActuarialDashboard({ live }: { live: boolean }) {
   }
 
   const netPosition = summary.trailing_30d_premiums - summary.trailing_30d_payouts
-  const netColor = netPosition >= 0 ? '#00ff87' : '#ff4d4d'
+  const netColor = netPosition >= 0 ? 'blue' : 'neutral'
 
   return (
-    <div style={{ maxWidth: 1100 }}>
+    <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Actuarial Dashboard</h1>
-        <span style={{
-          fontSize: 10,
-          padding: '2px 8px',
-          borderRadius: 8,
-          background: live ? 'rgba(0,255,135,0.1)' : 'rgba(255,193,7,0.1)',
-          color: live ? '#00ff87' : '#ffc107',
-          border: `1px solid ${live ? '#00ff87' : '#ffc107'}`,
-        }}>
-          {live ? 'LIVE' : 'DEMO'}
-        </span>
+        <h1 className="page-title" style={{ fontSize: 30 }}>Actuarial Dashboard</h1>
+        <Badge variant="info">{live ? 'LIVE' : 'DEMO'}</Badge>
       </div>
 
-      {/* Top row: BCR Gauge + metric cards */}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '320px minmax(0, 1fr)', gap: 16, alignItems: 'start', marginBottom: 20 }}>
         <BCRGauge bcr={summary.burning_cost_rate} status={summary.bcr_status} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: '1 1 450px', minWidth: 450 }}>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <MetricCard
-              title="Loss Ratio (7d)"
-              value={`${(summary.loss_ratio * 100).toFixed(1)}%`}
-              subtitle="Target: ≤65%"
-              color={summary.loss_ratio <= 0.65 ? '#00ff87' : '#ff4d4d'}
-              icon="📊"
-            />
-            <MetricCard
-              title="Reserve Ratio"
-              value={`${summary.reserve_ratio.toFixed(1)}%`}
-              subtitle="Premium surplus"
-              color={summary.reserve_ratio > 30 ? '#00ff87' : '#ffc107'}
-              icon="🛡️"
-            />
-          </div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <MetricCard
-              title="30-Day Net"
-              value={`₹${Math.abs(netPosition).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
-              subtitle={netPosition >= 0 ? 'Surplus' : 'Deficit'}
-              color={netColor}
-              icon={netPosition >= 0 ? '📈' : '📉'}
-            />
-            <MetricCard
-              title="Active Policies"
-              value={summary.active_policies.toString()}
-              subtitle="Currently covered riders"
-              color="var(--text-1)"
-              icon="📋"
-            />
-          </div>
+        <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(2,minmax(0,1fr))' }}>
+          <StatCard icon={<ChartNoAxesCombined size={16} />} label="Loss Ratio (7d)" value={`${(summary.loss_ratio * 100).toFixed(1)}%`} hint="Target: ≤65%" tone="blue" />
+          <StatCard icon={<Shield size={16} />} label="Reserve Ratio" value={`${summary.reserve_ratio.toFixed(1)}%`} hint="Premium surplus buffer" tone="neutral" />
+          <StatCard icon={<WalletCards size={16} />} label="30-Day Net" value={`₹${Math.abs(netPosition).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`} hint={netPosition >= 0 ? 'Surplus' : 'Deficit'} tone={netColor} />
+          <StatCard icon={<NotebookText size={16} />} label="Active Policies" value={summary.active_policies.toString()} hint="Currently covered riders" tone="neutral" />
         </div>
       </div>
 
-      {/* Financial summary table */}
-      <div style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 12,
-        overflow: 'hidden',
-      }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, fontWeight: 600 }}>
-          Trailing 30-Day Financials
-        </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <ChartCard title="Trailing 30-Day Financials" subtitle="Operational solvency and burn profile">
+        <table className="data-table">
           <tbody>
             {[
-              ['Premiums Collected (30d)', `₹${summary.trailing_30d_premiums.toLocaleString('en-IN')}`, '#00ff87'],
-              ['Payouts Disbursed (30d)', `₹${summary.trailing_30d_payouts.toLocaleString('en-IN')}`, '#ff4d4d'],
+              ['Premiums Collected (30d)', `₹${summary.trailing_30d_premiums.toLocaleString('en-IN')}`, 'var(--accent)'],
+              ['Payouts Disbursed (30d)', `₹${summary.trailing_30d_payouts.toLocaleString('en-IN')}`, '#52525B'],
               ['Net Position', `₹${Math.abs(netPosition).toLocaleString('en-IN')}`, netColor],
-              ['Burning Cost Rate', `${summary.burning_cost_rate.toFixed(1)}%`, BCR_COLORS[summary.bcr_status as keyof typeof BCR_COLORS]?.text || '#00ff87'],
+              ['Burning Cost Rate', `${summary.burning_cost_rate.toFixed(1)}%`, BCR_COLORS[summary.bcr_status as keyof typeof BCR_COLORS]?.text || 'var(--accent)'],
               ['Claims This Week', summary.claims_pending.toString(), 'var(--text-1)'],
               ['Avg Payout', `₹${(summary.total_payouts / Math.max(summary.claims_pending, 1)).toFixed(0)}`, 'var(--text-1)'],
             ].map(([label, value, color], i) => (
-              <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '10px 20px', fontSize: 13, color: 'var(--text-2)' }}>{label}</td>
-                <td style={{ padding: '10px 20px', fontSize: 14, fontWeight: 600, textAlign: 'right', fontFamily: 'var(--font-mono)', color: color as string }}>
+              <tr key={i}>
+                <td style={{ color: 'var(--text-2)' }}>{label}</td>
+                <td style={{ fontSize: 14, fontWeight: 600, textAlign: 'right', fontFamily: 'var(--font-mono)', color: color as string }}>
                   {value}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      </ChartCard>
 
-      {/* BCR Status Banner */}
       {summary.bcr_status === 'CRITICAL' && (
         <div style={{
           marginTop: 16,
           padding: '12px 20px',
-          background: 'rgba(255, 77, 77, 0.08)',
-          border: '1px solid #ff4d4d',
+          background: 'rgba(82, 82, 91, 0.14)',
+          border: '1px solid #52525B',
           borderRadius: 10,
-          color: '#ff4d4d',
+          color: '#A1A1AA',
           fontSize: 13,
           display: 'flex',
           alignItems: 'center',
           gap: 10,
         }}>
-          <span style={{ fontSize: 18 }}>⚠️</span>
+          <Activity size={18} />
           <span>
             BCR is above 85% — the portfolio is operating at an <strong>actuarial deficit</strong>.
             Consider raising premiums, tightening fraud filters, or adjusting zone risk multipliers.

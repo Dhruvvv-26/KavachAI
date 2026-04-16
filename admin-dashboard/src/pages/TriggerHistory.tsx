@@ -53,7 +53,7 @@ export default function TriggerHistory() {
 
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-value" style={{ color: activeCount > 0 ? '#FF9800' : undefined }}>{activeCount}</div>
+          <div className="stat-value" style={{ color: activeCount > 0 ? 'var(--accent)' : undefined }}>{activeCount}</div>
           <div className="stat-label">Active Now</div>
         </div>
         <div className="stat-card">
@@ -77,15 +77,15 @@ export default function TriggerHistory() {
         <div className="chart-container" style={{ height: 280 }}>
           <ResponsiveContainer>
             <BarChart data={DAILY_TRIGGERS}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(30,58,95,0.5)" />
-              <XAxis dataKey="day" tick={{ fill: '#8FA3BF', fontSize: 12 }} />
-              <YAxis tick={{ fill: '#8FA3BF', fontSize: 11 }} />
-              <Tooltip contentStyle={{ background: '#0F2038', border: '1px solid #1E3A5F', borderRadius: 8 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+              <XAxis dataKey="day" tick={{ fill: '#9CA3AF', fontSize: 12 }} />
+              <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} />
+              <Tooltip contentStyle={{ background: 'rgba(15,23,42,0.92)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8 }} />
               <Legend />
-              <Bar dataKey="aqi" name="AQI" fill="#FF9800" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="rain" name="Heavy Rain" fill="#64B5F6" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="heat" name="Extreme Heat" fill="#FF5252" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="wind" name="Cyclone Wind" fill="#9C27B0" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="aqi" name="AQI" fill="#7C7CFF" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="rain" name="Heavy Rain" fill="#52525B" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="heat" name="Extreme Heat" fill="#3F3F46" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="wind" name="Cyclone Wind" fill="#71717A" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -100,8 +100,9 @@ export default function TriggerHistory() {
                 key={f}
                 className="btn"
                 style={{
-                  background: filter === f ? 'var(--primary)' : 'var(--surface-light)',
-                  color: filter === f ? 'var(--bg)' : 'var(--text-dim)',
+                  background: filter === f ? 'var(--accent-soft)' : 'rgba(255,255,255,0.03)',
+                  color: filter === f ? 'var(--accent)' : 'var(--text-2)',
+                  borderColor: filter === f ? 'rgba(99,102,241,0.3)' : 'var(--border)',
                 }}
                 onClick={() => setFilter(f)}
               >
@@ -130,27 +131,27 @@ export default function TriggerHistory() {
                 <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{t.id}</td>
                 <td>
                   <div>{t.city}</div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{t.zone.replace(/_/g, ' ')}</div>
+                  <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{t.zone.replace(/_/g, ' ')}</div>
                 </td>
                 <td>{t.eventType.replace(/_/g, ' ')}</td>
                 <td><span className={`badge badge-${t.tier}`}>{t.tier.toUpperCase()}</span></td>
                 <td>
                   <span style={{ fontWeight: 600 }}>{t.metricValue}</span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: 11 }}> / {t.threshold}</span>
+                  <span style={{ color: 'var(--text-3)', fontSize: 11 }}> / {t.threshold}</span>
                 </td>
                 <td>{t.affectedRiders}</td>
                 <td style={{ fontWeight: 600 }}>₹{t.totalPayout.toLocaleString()}</td>
                 <td>
                   <span style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6,
-                    color: t.status === 'active' ? '#FF9800' : '#00E676',
+                    color: t.status === 'active' ? 'var(--accent)' : '#52525B',
                     fontWeight: 600, fontSize: 13,
                   }}>
-                    {t.status === 'active' && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#FF9800', animation: 'pulse 2s infinite', display: 'inline-block' }} />}
+                    {t.status === 'active' && <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', animation: 'pulse 2s infinite', display: 'inline-block' }} />}
                     {t.status}
                   </span>
                 </td>
-                <td style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                <td style={{ fontSize: 12, color: 'var(--text-2)' }}>
                   {new Date(t.startedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                   {' '}
                   {new Date(t.startedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}

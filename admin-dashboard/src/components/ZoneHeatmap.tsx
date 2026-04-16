@@ -3,13 +3,16 @@ import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip as LTooltip } fro
 import type { Zone } from '../lib/types'
 import { fetchZones, fetchTriggerStatus } from '../lib/api'
 import type { ActiveTrigger } from '../lib/types'
+import ChartCard from './ui/ChartCard'
+import Badge from './ui/Badge'
+import GlassCard from './ui/GlassCard'
 
 function riskColor(score: number): string {
-  if (score < 0.35) return '#00C9B1'
-  if (score < 0.55) return '#4CAF50'
-  if (score < 0.70) return '#F59E0B'
-  if (score < 0.85) return '#EF8C34'
-  return '#EF4444'
+  if (score < 0.35) return '#7C7CFF'
+  if (score < 0.55) return '#6366F1'
+  if (score < 0.70) return '#71717A'
+  if (score < 0.85) return '#52525B'
+  return '#3F3F46'
 }
 
 function riskLabel(score: number): string {
@@ -22,22 +25,22 @@ function riskLabel(score: number): string {
 
 function CityLegend() {
   const entries = [
-    { label: 'Low risk', color: '#00C9B1' },
-    { label: 'Moderate', color: '#4CAF50' },
-    { label: 'Elevated', color: '#F59E0B' },
-    { label: 'High', color: '#EF8C34' },
-    { label: 'Critical', color: '#EF4444' },
+    { label: 'Low risk', color: '#7C7CFF' },
+    { label: 'Moderate', color: '#6366F1' },
+    { label: 'Elevated', color: '#71717A' },
+    { label: 'High', color: '#52525B' },
+    { label: 'Critical', color: '#3F3F46' },
   ]
   return (
     <div style={{
       position: 'absolute', bottom: 20, left: 20, zIndex: 1000,
-      background: 'rgba(12,22,40,0.92)', border: '1px solid rgba(0,201,177,0.2)',
-      borderRadius: 8, padding: '10px 14px',
-      backdropFilter: 'blur(8px)', display: 'flex', flexDirection: 'column', gap: 6,
+      background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+      borderRadius: 14, padding: '12px 14px',
+      backdropFilter: 'blur(14px)', display: 'flex', flexDirection: 'column', gap: 6,
     }}>
-      <div style={{ fontSize: 10, color: '#3D5A78', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Zone Risk Level</div>
+      <div style={{ fontSize: 10, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Zone Risk Level</div>
       {entries.map(e => (
-        <div key={e.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#7A9CC0' }}>
+        <div key={e.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#E5E7EB' }}>
           <span style={{ width: 12, height: 12, borderRadius: '50%', background: e.color, display: 'inline-block', opacity: 0.85 }} />
           {e.label}
         </div>
@@ -87,12 +90,12 @@ export default function ZoneHeatmap({ live }: { live: boolean }) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16, alignItems: 'start' }}>
-        <div className="card" style={{ padding: 0, overflow: 'hidden', position: 'relative' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 300px', gap: 16, alignItems: 'start' }}>
+        <GlassCard className="map-card">
           <MapContainer
             center={[24.0, 77.5]}
             zoom={5}
-            style={{ height: 500 }}
+            style={{ height: 560, borderRadius: 16 }}
             zoomControl={true}
           >
             <TileLayer
@@ -121,7 +124,7 @@ export default function ZoneHeatmap({ live }: { live: boolean }) {
                       Riders: {zone.active_riders}<br />
                       Triggers (30d): {zone.trigger_count_30d}<br />
                       {zone.last_trigger && <>Last: {zone.last_trigger}</>}
-                      {isActive && <><br /><span style={{ color: '#EF4444', fontWeight: 700 }}>⚡ ACTIVE TRIGGER</span></>}
+                      {isActive && <><br /><span style={{ color: '#7C7CFF', fontWeight: 700 }}>⚡ ACTIVE TRIGGER</span></>}
                     </div>
                   </LTooltip>
                   <Popup>
@@ -129,16 +132,16 @@ export default function ZoneHeatmap({ live }: { live: boolean }) {
                       <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>{zone.zone_id}</div>
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <tbody>
-                          <tr><td style={{ color: '#666', paddingRight: 8 }}>City</td><td>{zone.city}</td></tr>
-                          <tr><td style={{ color: '#666' }}>Risk score</td><td style={{ color: riskColor(zone.risk_score), fontWeight: 700 }}>{(zone.risk_score * 100).toFixed(0)}%</td></tr>
-                          <tr><td style={{ color: '#666' }}>Active riders</td><td>{zone.active_riders}</td></tr>
-                          <tr><td style={{ color: '#666' }}>Triggers (30d)</td><td>{zone.trigger_count_30d}</td></tr>
-                          {zone.last_trigger && <tr><td style={{ color: '#666' }}>Last trigger</td><td>{zone.last_trigger}</td></tr>}
-                          <tr><td style={{ color: '#666' }}>Centroid</td><td>{zone.centroid_lat.toFixed(4)}, {zone.centroid_lon.toFixed(4)}</td></tr>
+                          <tr><td style={{ color: '#6B7280', paddingRight: 8 }}>City</td><td>{zone.city}</td></tr>
+                          <tr><td style={{ color: '#6B7280' }}>Risk score</td><td style={{ color: riskColor(zone.risk_score), fontWeight: 700 }}>{(zone.risk_score * 100).toFixed(0)}%</td></tr>
+                          <tr><td style={{ color: '#6B7280' }}>Active riders</td><td>{zone.active_riders}</td></tr>
+                          <tr><td style={{ color: '#6B7280' }}>Triggers (30d)</td><td>{zone.trigger_count_30d}</td></tr>
+                          {zone.last_trigger && <tr><td style={{ color: '#6B7280' }}>Last trigger</td><td>{zone.last_trigger}</td></tr>}
+                          <tr><td style={{ color: '#6B7280' }}>Centroid</td><td>{zone.centroid_lat.toFixed(4)}, {zone.centroid_lon.toFixed(4)}</td></tr>
                         </tbody>
                       </table>
                       {isActive && (
-                        <div style={{ marginTop: 8, padding: '4px 8px', background: '#fef2f2', borderRadius: 4, color: '#dc2626', fontWeight: 700, fontSize: 11 }}>
+                        <div style={{ marginTop: 8, padding: '4px 8px', background: 'rgba(124,124,255,0.1)', borderRadius: 4, color: '#7C7CFF', fontWeight: 700, fontSize: 11 }}>
                           ⚡ Active parametric trigger
                         </div>
                       )}
@@ -149,16 +152,13 @@ export default function ZoneHeatmap({ live }: { live: boolean }) {
             })}
             <CityLegend />
           </MapContainer>
-        </div>
+        </GlassCard>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">Zone Summary</div>
-            </div>
+          <ChartCard title="Zone Summary" subtitle="Ranked by current risk score">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {zones.slice().sort((a, b) => b.risk_score - a.risk_score).map(zone => (
-                <div key={zone.zone_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                <div key={zone.zone_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   <div style={{ width: 10, height: 10, borderRadius: '50%', background: riskColor(zone.risk_score), flexShrink: 0, boxShadow: activeZones.has(zone.zone_id) ? `0 0 0 3px ${riskColor(zone.risk_score)}40` : 'none' }} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 12, fontFamily: 'IBM Plex Mono', color: 'var(--text-1)' }}>{zone.zone_id}</div>
@@ -170,23 +170,19 @@ export default function ZoneHeatmap({ live }: { live: boolean }) {
                 </div>
               ))}
             </div>
-          </div>
+          </ChartCard>
 
           {activeTriggers.length > 0 && (
-            <div className="card" style={{ borderColor: 'rgba(239,68,68,0.3)' }}>
-              <div className="card-header">
-                <div className="card-title">Active Triggers</div>
-                <span className="badge badge-red">LIVE</span>
-              </div>
+            <ChartCard title="Active Triggers" subtitle="Zones currently breaching parametric thresholds" action={<Badge variant="info">LIVE</Badge>} className="critical-card">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {activeTriggers.map((t, i) => (
-                  <div key={i} style={{ padding: '8px 10px', background: 'var(--red-glow)', borderRadius: 6, border: '1px solid var(--red)', fontSize: 12 }}>
-                    <div style={{ fontFamily: 'IBM Plex Mono', color: 'var(--red)', fontWeight: 700 }}>{t.zone}</div>
+                    <div key={i} style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(124,124,255,0.18)', fontSize: 12 }}>
+                      <div style={{ fontFamily: 'IBM Plex Mono', color: 'var(--accent)', fontWeight: 700 }}>{t.zone}</div>
                     <div style={{ color: 'var(--text-2)', marginTop: 2 }}>{t.event_type.toUpperCase()} · {t.metric_value} · Tier {t.tier}</div>
                   </div>
                 ))}
               </div>
-            </div>
+            </ChartCard>
           )}
         </div>
       </div>

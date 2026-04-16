@@ -38,10 +38,10 @@ const ZONES: Zone[] = [
 ]
 
 const SEVERITY_COLORS = {
-  none: '#5A7090',
-  tier1: '#4CAF50',
-  tier2: '#FF9800',
-  tier3: '#F44336',
+  none: '#52525B',
+  tier1: '#7C7CFF',
+  tier2: '#71717A',
+  tier3: '#3F3F46',
 }
 
 const SEVERITY_RADIUS = {
@@ -69,7 +69,7 @@ export default function ZoneMap() {
           <div className="stat-label">Total Zones</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value" style={{ color: activeCount > 0 ? '#FF9800' : undefined }}>{activeCount}</div>
+          <div className="stat-value" style={{ color: activeCount > 0 ? 'var(--accent)' : undefined }}>{activeCount}</div>
           <div className="stat-label">Active Triggers</div>
         </div>
         <div className="stat-card">
@@ -83,10 +83,10 @@ export default function ZoneMap() {
       </div>
 
       <div className="map-container">
-        <MapContainer
+          <MapContainer
           center={[22.0, 78.0]}
           zoom={5}
-          style={{ height: '100%', width: '100%', background: '#0A1628' }}
+          style={{ height: '100%', width: '100%', background: 'var(--bg-surface)' }}
           scrollWheelZoom={true}
         >
           <TileLayer
@@ -106,7 +106,7 @@ export default function ZoneMap() {
               }}
             >
               <Tooltip direction="top" offset={[0, -10]}>
-                <div style={{ fontFamily: 'Inter', fontSize: 12 }}>
+                <div style={{ fontFamily: 'Inter', fontSize: 12, color: '#E5E7EB' }}>
                   <strong>{zone.code.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong>
                   <br />
                   {zone.city} • {zone.activeTriggers > 0 ? `${zone.activeTriggers} active trigger(s)` : 'No triggers'}
@@ -115,7 +115,7 @@ export default function ZoneMap() {
                 </div>
               </Tooltip>
               <Popup>
-                <div style={{ fontFamily: 'Inter', minWidth: 200 }}>
+                <div style={{ fontFamily: 'Inter', minWidth: 200, color: '#E5E7EB' }}>
                   <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>{zone.code}</h3>
                   <p style={{ margin: '4px 0', fontSize: 12 }}>City: {zone.city}</p>
                   <p style={{ margin: '4px 0', fontSize: 12 }}>Active Triggers: {zone.activeTriggers}</p>

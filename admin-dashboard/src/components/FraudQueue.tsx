@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from 'react'
+import { Fragment, useEffect, useState, useCallback } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import type { Claim } from '../lib/types'
 import { fetchClaims, approveClaim, blockClaim } from '../lib/api'
+import Badge from './ui/Badge'
 
 function scoreColor(v: number) {
   if (v < 0.3) return 'var(--teal)'
@@ -44,22 +45,25 @@ function LayerBars({ scores }: { scores: Claim['layer_scores'] }) {
 }
 
 function StatusBadge({ status }: { status: Claim['status'] }) {
-  const map: Record<string, string> = {
-    AUTO_APPROVED: 'badge-teal',
-    SOFT_HOLD: 'badge-amber',
-    BLOCKED: 'badge-red',
-    PENDING: 'badge-gray',
+  const map: Record<string, 'success' | 'warn' | 'danger' | 'neutral'> = {
+    AUTO_APPROVED: 'success',
+    SOFT_HOLD: 'warn',
+    BLOCKED: 'danger',
+    PENDING: 'neutral',
   }
-  return <span className={`badge ${map[status] ?? 'badge-gray'}`}>{status.replace('_', ' ')}</span>
+  return <Badge variant={map[status] ?? 'neutral'}>{status.replace('_', ' ')}</Badge>
 }
 
 function EventBadge({ type }: { type: string }) {
-  const icons: Record<string, string> = { aqi: '☁', rain: '⛈', heat: '♨', cyclone: '🌀', bandh: '🔒' }
+  const map: Record<string, 'info' | 'warn' | 'danger' | 'neutral'> = {
+    aqi: 'warn',
+    rain: 'info',
+    heat: 'danger',
+    cyclone: 'danger',
+    bandh: 'neutral',
+  }
   return (
-    <span style={{ fontSize: 12, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 4 }}>
-      <span style={{ fontSize: 15 }}>{icons[type] ?? '⚡'}</span>
-      {type.toUpperCase()}
-    </span>
+    <Badge variant={map[type] ?? 'neutral'}>{type.toUpperCase()}</Badge>
   )
 }
 
@@ -113,7 +117,7 @@ export default function FraudQueue({ live }: { live: boolean }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: 2 }}>
         {(['ALL', 'SOFT_HOLD', 'BLOCKED', 'AUTO_APPROVED'] as const).map(f => (
           <button
             key={f}
@@ -154,9 +158,8 @@ export default function FraudQueue({ live }: { live: boolean }) {
             </thead>
             <tbody>
               {filtered.map(claim => (
-                <>
+                <Fragment key={claim.claim_id}>
                   <tr
-                    key={claim.claim_id}
                     className={expanded === claim.claim_id ? 'expanded' : ''}
                     onClick={() => setExpanded(prev => prev === claim.claim_id ? null : claim.claim_id)}
                   >
@@ -189,7 +192,7 @@ export default function FraudQueue({ live }: { live: boolean }) {
                   </tr>
 
                   {expanded === claim.claim_id && (
-                    <tr className="detail-row" key={`${claim.claim_id}-detail`}>
+                    <tr className="detail-row">
                       <td colSpan={9}>
                         <div className="detail-inner">
                           <div className="detail-section">
@@ -265,7 +268,7 @@ export default function FraudQueue({ live }: { live: boolean }) {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>

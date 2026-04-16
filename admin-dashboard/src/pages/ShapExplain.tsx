@@ -8,29 +8,29 @@ interface ShapFeature {
 }
 
 const ARJUN: ShapFeature[] = [
-  { name: 'City Risk (Delhi NCR)', value: 28.4, color: '#FF5252' },
-  { name: 'Coverage Tier (Standard)', value: 18.2, color: '#FF9800' },
-  { name: 'Vehicle Risk (Bicycle)', value: 14.7, color: '#FFB74D' },
-  { name: 'Seasonality (Monsoon)', value: 12.3, color: '#FFB74D' },
-  { name: 'Disruption History (90d)', value: 9.8, color: '#4CAF50' },
-  { name: 'Historical AQI Events', value: 7.1, color: '#4CAF50' },
-  { name: 'Historical Rain Events', value: 5.9, color: '#4CAF50' },
-  { name: 'Work Hours (Full Day)', value: 4.2, color: '#00C9B1' },
-  { name: 'Work Days/Month', value: -2.1, color: '#64B5F6' },
-  { name: 'Zone Index', value: -1.8, color: '#64B5F6' },
+  { name: 'City Risk (Delhi NCR)', value: 28.4, color: '#7C7CFF' },
+  { name: 'Coverage Tier (Standard)', value: 18.2, color: '#7C7CFF' },
+  { name: 'Vehicle Risk (Bicycle)', value: 14.7, color: '#7C7CFF' },
+  { name: 'Seasonality (Monsoon)', value: 12.3, color: '#7C7CFF' },
+  { name: 'Disruption History (90d)', value: 9.8, color: '#7C7CFF' },
+  { name: 'Historical AQI Events', value: 7.1, color: '#7C7CFF' },
+  { name: 'Historical Rain Events', value: 5.9, color: '#7C7CFF' },
+  { name: 'Work Hours (Full Day)', value: 4.2, color: '#52525B' },
+  { name: 'Work Days/Month', value: -2.1, color: '#52525B' },
+  { name: 'Zone Index', value: -1.8, color: '#52525B' },
 ]
 
 const BLR_RIDER: ShapFeature[] = [
-  { name: 'City Risk (Bengaluru)', value: -8.6, color: '#64B5F6' },
-  { name: 'Coverage Tier (Basic)', value: -6.4, color: '#64B5F6' },
-  { name: 'Vehicle Risk (Motorcycle)', value: -5.2, color: '#64B5F6' },
-  { name: 'Seasonality (Winter)', value: -3.8, color: '#64B5F6' },
-  { name: 'Disruption History (90d)', value: 2.1, color: '#4CAF50' },
-  { name: 'Historical AQI Events', value: -1.5, color: '#64B5F6' },
-  { name: 'Historical Rain Events', value: 3.2, color: '#4CAF50' },
-  { name: 'Work Hours (Peak Only)', value: -2.8, color: '#64B5F6' },
-  { name: 'Work Days/Month', value: 1.5, color: '#4CAF50' },
-  { name: 'Zone Index', value: -0.8, color: '#64B5F6' },
+  { name: 'City Risk (Bengaluru)', value: -8.6, color: '#52525B' },
+  { name: 'Coverage Tier (Basic)', value: -6.4, color: '#52525B' },
+  { name: 'Vehicle Risk (Motorcycle)', value: -5.2, color: '#52525B' },
+  { name: 'Seasonality (Winter)', value: -3.8, color: '#52525B' },
+  { name: 'Disruption History (90d)', value: 2.1, color: '#7C7CFF' },
+  { name: 'Historical AQI Events', value: -1.5, color: '#52525B' },
+  { name: 'Historical Rain Events', value: 3.2, color: '#7C7CFF' },
+  { name: 'Work Hours (Peak Only)', value: -2.8, color: '#52525B' },
+  { name: 'Work Days/Month', value: 1.5, color: '#7C7CFF' },
+  { name: 'Zone Index', value: -0.8, color: '#52525B' },
 ]
 
 const PROFILES = [
@@ -57,13 +57,13 @@ export default function ShapExplain() {
             className="stat-card"
             style={{
               cursor: 'pointer',
-              border: i === selectedProfile ? '2px solid var(--primary)' : '1px solid var(--border)',
+              border: i === selectedProfile ? '2px solid var(--accent)' : '1px solid var(--border)',
               transition: 'all 0.2s',
             }}
             onClick={() => setSelectedProfile(i)}
           >
-            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{p.name}</div>
-            <div style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 4 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)' }}>{p.name}</div>
+              <div style={{ color: 'var(--text-2)', fontSize: 13, marginTop: 4 }}>
               {p.city} • {p.vehicle} • {p.tier}
             </div>
             <div className="stat-value" style={{ marginTop: 8 }}>{p.premium}</div>
@@ -79,12 +79,12 @@ export default function ShapExplain() {
           <div className="chart-container" style={{ height: 420 }}>
             <ResponsiveContainer>
               <BarChart data={profile.data} layout="vertical" margin={{ left: 160, right: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(30,58,95,0.5)" />
-                <XAxis type="number" tick={{ fill: '#8FA3BF', fontSize: 11 }} />
-                <YAxis type="category" dataKey="name" tick={{ fill: '#8FA3BF', fontSize: 11 }} width={160} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                <XAxis type="number" tick={{ fill: '#9CA3AF', fontSize: 11 }} />
+                <YAxis type="category" dataKey="name" tick={{ fill: '#9CA3AF', fontSize: 11 }} width={160} />
                 <Tooltip
-                  contentStyle={{ background: '#0F2038', border: '1px solid #1E3A5F', borderRadius: 8 }}
-                  labelStyle={{ color: '#fff' }}
+                  contentStyle={{ background: 'rgba(15,23,42,0.92)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8 }}
+                  labelStyle={{ color: '#E5E7EB' }}
                   formatter={(value: number) => [`${value > 0 ? '+' : ''}${value.toFixed(1)}`, 'SHAP value']}
                 />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
@@ -104,9 +104,9 @@ export default function ShapExplain() {
           <div style={{ padding: '8px 0' }}>
             <div className="shap-bar">
               <span className="shap-label" style={{ fontWeight: 600 }}>Base Rate</span>
-              <div className="shap-bar-track">
-                <div className="shap-bar-fill" style={{ width: '30%', background: '#5A7090' }} />
-              </div>
+                <div className="shap-bar-track">
+                  <div className="shap-bar-fill" style={{ width: '30%', background: 'var(--accent)' }} />
+                </div>
               <span className="shap-value">₹25.00</span>
             </div>
             {profile.data.map((feat, i) => (
@@ -118,22 +118,22 @@ export default function ShapExplain() {
                     style={{
                       width: `${(Math.abs(feat.value) / maxAbsVal) * 80 + 5}%`,
                       background: feat.value > 0
-                        ? 'linear-gradient(90deg, #FF5252, #FF9800)'
-                        : 'linear-gradient(90deg, #64B5F6, #00C9B1)',
+                        ? 'var(--accent)'
+                        : '#52525B',
                     }}
                   />
                 </div>
-                <span className="shap-value" style={{ color: feat.value > 0 ? '#FF9800' : '#64B5F6' }}>
+                <span className="shap-value" style={{ color: feat.value > 0 ? 'var(--accent)' : '#52525B' }}>
                   {feat.value > 0 ? '+' : ''}{feat.value.toFixed(1)}
                 </span>
               </div>
             ))}
             <div className="shap-bar" style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 8 }}>
-              <span className="shap-label" style={{ fontWeight: 700, color: 'var(--text)' }}>Final Premium</span>
+              <span className="shap-label" style={{ fontWeight: 700, color: 'var(--text-1)' }}>Final Premium</span>
               <div className="shap-bar-track">
                 <div className="shap-bar-fill" style={{
                   width: '100%',
-                  background: 'linear-gradient(90deg, var(--primary), var(--accent))',
+                  background: 'var(--accent)',
                 }} />
               </div>
               <span className="shap-value" style={{ fontWeight: 800, fontSize: 16 }}>{profile.premium}</span>

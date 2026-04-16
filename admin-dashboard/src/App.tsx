@@ -1,7 +1,23 @@
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import React, { useEffect, useState } from 'react'
+import {
+  Activity,
+  Camera,
+  ChevronRight,
+  Clock3,
+  Flame,
+  Gauge,
+  GitBranch,
+  Menu,
+  ShieldAlert,
+  Sparkles,
+  User,
+  X,
+} from 'lucide-react'
 import { fetchPaymentSummary, fetchTriggerStatus } from './lib/api'
 import type { PaymentSummary, TriggerStatus } from './lib/types'
+import SidebarItem from './components/ui/SidebarItem'
+import Badge from './components/ui/Badge'
 
 import FraudQueue from './components/FraudQueue'
 import SHAPWaterfall from './components/SHAPWaterfall'
@@ -10,77 +26,98 @@ import DualSelfieCheck from './components/DualSelfieCheck'
 import LiveMetrics from './components/LiveMetrics'
 import ActuarialDashboard from './components/ActuarialDashboard'
 
-function Topbar({ live, triggerStatus }: { live: boolean; triggerStatus: TriggerStatus | null }) {
+function Topbar({
+  live,
+  triggerStatus,
+  sidebarOpen,
+  onToggleSidebar,
+}: {
+  live: boolean
+  triggerStatus: TriggerStatus | null
+  sidebarOpen: boolean
+  onToggleSidebar: () => void
+}) {
   const [now, setNow] = useState(new Date())
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t) }, [])
 
   return (
     <div className="topbar">
-      <div className="topbar-logo">
-        ⚡ KavachAI
-        <span>Admin Command Center — Phase 3</span>
+      <button className="menu-button" onClick={onToggleSidebar} aria-label="Toggle navigation">
+        {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
+      </button>
+
+      <div className="topbar-brand">
+        <span className="brand-mark"><Sparkles size={15} /></span>
+        <div>
+          <strong>KavachAI</strong>
+          <span>Admin Command Center</span>
+        </div>
       </div>
+
       {triggerStatus?.active_triggers?.length ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--amber)' }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--amber)', display: 'inline-block', animation: 'pulse-dot 1s ease-in-out infinite' }} />
+        <div className="topbar-trigger">
+          <span className="live-dot amber" />
           {triggerStatus.active_triggers.length} active trigger{triggerStatus.active_triggers.length > 1 ? 's' : ''} live
         </div>
       ) : null}
+
       <div className="topbar-right">
-        <span className="topbar-tag">{now.toLocaleTimeString('en-IN', { hour12: false })}</span>
-        <div className="live-dot" style={{ background: live ? 'var(--teal)' : 'var(--amber)' }} />
-        <span className="topbar-tag" style={{ color: live ? 'var(--teal)' : 'var(--amber)' }}>
-          {live ? 'LIVE' : 'DEMO'}
+        <span className="topbar-time"><Clock3 size={13} />{now.toLocaleTimeString('en-IN', { hour12: false })}</span>
+        <span className={`status-pill ${live ? 'live' : 'demo'}`}>
+          <span className="live-dot" />
+          {live ? 'Live mode' : 'Demo mode'}
         </span>
-        <span style={{
-          fontSize: 9,
-          padding: '2px 6px',
-          borderRadius: 4,
-          background: 'rgba(123, 97, 255, 0.15)',
-          color: '#7b61ff',
-          border: '1px solid rgba(123, 97, 255, 0.3)',
-          marginLeft: 4,
-        }}>
-          v3.0
-        </span>
+        <Badge variant="info">v3.0</Badge>
+        <div className="topbar-avatar"><User size={14} /></div>
       </div>
     </div>
   )
 }
 
-function Sidebar({ softHolds, pendingClaims }: { softHolds: number; pendingClaims: number }) {
+function Sidebar({
+  softHolds,
+  pendingClaims,
+  open,
+  onNavigate,
+}: {
+  softHolds: number
+  pendingClaims: number
+  open: boolean
+  onNavigate: () => void
+}) {
   return (
-    <nav className="sidebar">
-      <div className="nav-section">Overview</div>
-      <NavLink to="/" end className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-        <span className="nav-icon">◈</span> Live Metrics
-      </NavLink>
+    <nav className={`sidebar ${open ? 'open' : ''}`}>
+      <div className="sidebar-inner">
+        <div className="sidebar-section">Overview</div>
+        <SidebarItem to="/" end icon={<Activity size={15} />} label="Live Metrics" onNavigate={onNavigate} />
 
-      <div className="nav-section">Fraud Management</div>
-      <NavLink to="/fraud-queue" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-        <span className="nav-icon">⚠</span> Fraud Queue
-        {pendingClaims > 0 && <span className="nav-badge">{pendingClaims}</span>}
-      </NavLink>
-      <NavLink to="/dual-selfie" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-        <span className="nav-icon">◉</span> Dual Selfie Check
-        {softHolds > 0 && <span className="nav-badge amber">{softHolds}</span>}
-      </NavLink>
+        <div className="sidebar-section">Fraud Management</div>
+        <SidebarItem
+          to="/fraud-queue"
+          icon={<ShieldAlert size={15} />}
+          label="Fraud Queue"
+          badge={pendingClaims > 0 ? pendingClaims : undefined}
+          badgeVariant="danger"
+          onNavigate={onNavigate}
+        />
+        <SidebarItem
+          to="/dual-selfie"
+          icon={<Camera size={15} />}
+          label="Dual Selfie Check"
+          badge={softHolds > 0 ? softHolds : undefined}
+          badgeVariant="warn"
+          onNavigate={onNavigate}
+        />
 
-      <div className="nav-section">Analytics</div>
-      <NavLink to="/shap" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-        <span className="nav-icon">≋</span> SHAP Explainer
-      </NavLink>
-      <NavLink to="/zones" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-        <span className="nav-icon">◎</span> Zone Heatmap
-      </NavLink>
-      <NavLink to="/actuarial" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-        <span className="nav-icon">₹</span> Actuarial / BCR
-      </NavLink>
+        <div className="sidebar-section">Analytics</div>
+        <SidebarItem to="/shap" icon={<GitBranch size={15} />} label="SHAP Explainer" onNavigate={onNavigate} />
+        <SidebarItem to="/zones" icon={<Flame size={15} />} label="Zone Heatmap" onNavigate={onNavigate} />
+        <SidebarItem to="/actuarial" icon={<Gauge size={15} />} label="Actuarial / BCR" onNavigate={onNavigate} />
 
-      <div style={{ marginTop: 'auto', padding: '16px', borderTop: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Demo anchor</div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--teal)', wordBreak: 'break-all' }}>
-          Arjun Kumar<br />delhi_rohini
+        <div className="sidebar-footer">
+          <div className="sidebar-footer-label">Demo anchor</div>
+          <div className="sidebar-footer-worker">Arjun Kumar <ChevronRight size={13} /></div>
+          <div className="sidebar-footer-zone">delhi_rohini</div>
         </div>
       </div>
     </nav>
@@ -129,9 +166,11 @@ class ErrorBoundary extends React.Component<
 }
 
 export default function App() {
+  const location = useLocation()
   const [summary, setSummary] = useState<PaymentSummary | null>(null)
   const [triggerStatus, setTriggerStatus] = useState<TriggerStatus | null>(null)
   const [live, setLive] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -148,19 +187,36 @@ export default function App() {
   const softHolds = (summary as any)?.soft_holds_24h ?? 0
   const pendingClaims = summary?.claims_pending ?? 0
 
+  useEffect(() => {
+    setSidebarOpen(false)
+  }, [location.pathname])
+
   return (
     <div className="shell">
-      <Topbar live={live} triggerStatus={triggerStatus} />
-      <Sidebar softHolds={softHolds} pendingClaims={pendingClaims} />
+      <Topbar
+        live={live}
+        triggerStatus={triggerStatus}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen(prev => !prev)}
+      />
+      <Sidebar
+        softHolds={softHolds}
+        pendingClaims={pendingClaims}
+        open={sidebarOpen}
+        onNavigate={() => setSidebarOpen(false)}
+      />
+      {sidebarOpen ? <button className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} aria-label="Close navigation" /> : null}
       <main className="main">
-        <Routes>
-          <Route path="/" element={<LiveMetrics summary={summary} triggerStatus={triggerStatus} live={live} />} />
-          <Route path="/fraud-queue" element={<FraudQueue live={live} />} />
-          <Route path="/dual-selfie" element={<DualSelfieCheck live={live} />} />
-          <Route path="/shap" element={<SHAPWaterfall live={live} />} />
-          <Route path="/zones" element={<ZoneHeatmap live={live} />} />
-          <Route path="/actuarial" element={<ActuarialDashboard live={live} />} />
-        </Routes>
+        <div className="content-frame">
+          <Routes>
+            <Route path="/" element={<LiveMetrics summary={summary} triggerStatus={triggerStatus} live={live} />} />
+            <Route path="/fraud-queue" element={<FraudQueue live={live} />} />
+            <Route path="/dual-selfie" element={<DualSelfieCheck live={live} />} />
+            <Route path="/shap" element={<SHAPWaterfall live={live} />} />
+            <Route path="/zones" element={<ZoneHeatmap live={live} />} />
+            <Route path="/actuarial" element={<ActuarialDashboard live={live} />} />
+          </Routes>
+        </div>
       </main>
     </div>
   )

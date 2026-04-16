@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer, ReferenceLine } from 'recharts'
 import type { SHAPInput } from '../lib/types'
 import { calculatePremium } from '../lib/api'
+import ChartCard from './ui/ChartCard'
+import Badge from './ui/Badge'
 
 const FEATURE_LABELS: Record<string, string> = {
   base_rate: 'Base rate',
@@ -62,7 +64,7 @@ const CustomTooltip = ({ active, payload }: any) => {
   return (
     <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-2)', borderRadius: 8, padding: '10px 14px', fontSize: 12 }}>
       <div style={{ color: 'var(--text-2)', marginBottom: 4 }}>{d.name}</div>
-      <div style={{ color: d.positive ? 'var(--teal)' : 'var(--red)', fontFamily: 'IBM Plex Mono', fontWeight: 600, fontSize: 14 }}>
+      <div style={{ color: d.positive ? 'var(--accent)' : '#52525B', fontFamily: 'IBM Plex Mono', fontWeight: 600, fontSize: 14 }}>
         {d.isTotal ? '=' : (d.positive ? '+' : '')}₹{d.contribution.toFixed(2)}
       </div>
     </div>
@@ -113,15 +115,11 @@ export default function SHAPWaterfall({ live }: { live: boolean }) {
         </div>
       )}
 
-      <div className="card">
-        <div className="card-header">
-          <div className="card-title">Rider Profile Inputs</div>
-          {result && (
-            <span className="badge badge-teal">
-              {fromLive ? '● Live model' : '● Demo SHAP'}
-            </span>
-          )}
-        </div>
+      <ChartCard
+        title="Rider Profile Inputs"
+        subtitle="Tune rider risk profile and inspect feature-level contribution"
+        action={result ? <Badge variant="info">{fromLive ? 'Live model' : 'Demo SHAP'}</Badge> : null}
+      >
         <div className="shap-input-row">
           <div className="shap-input-group">
             <label>City</label>
@@ -188,7 +186,7 @@ export default function SHAPWaterfall({ live }: { live: boolean }) {
           <>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, margin: '16px 0 4px' }}>
               <div style={{ fontSize: 13, color: 'var(--text-2)' }}>Recommended weekly premium</div>
-              <div style={{ fontSize: 36, fontWeight: 700, color: 'var(--teal)', fontFamily: 'IBM Plex Mono' }}>
+              <div style={{ fontSize: 36, fontWeight: 700, color: 'var(--accent)', fontFamily: 'IBM Plex Mono' }}>
                 ₹{result.premium.toFixed(2)}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-3)' }}>/ week · {inputs.coverage_tier} tier</div>
@@ -206,15 +204,15 @@ export default function SHAPWaterfall({ live }: { live: boolean }) {
                 margin={{ top: 4, right: 60, left: 10, bottom: 4 }}
                 barSize={18}
               >
-                <XAxis type="number" domain={['auto', 'auto']} tick={{ fill: '#3D5A78', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `₹${v}`} />
-                <YAxis type="category" dataKey="name" width={190} tick={{ fill: '#7A9CC0', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <XAxis type="number" domain={['auto', 'auto']} tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `₹${v}`} />
+                <YAxis type="category" dataKey="name" width={190} tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} />
                 <ReferenceLine x={0} stroke="var(--border-2)" strokeWidth={1} />
                 <Bar dataKey={d => d.isTotal ? d.contribution : d.contribution} radius={[0, 4, 4, 0]}>
                   {waterfallData.map((entry, index) => (
                     <Cell
                       key={index}
-                      fill={entry.isTotal ? '#60A5FA' : entry.positive ? '#00C9B1' : '#EF4444'}
+                      fill={entry.isTotal ? 'var(--accent)' : entry.positive ? 'var(--accent)' : '#52525B'}
                       fillOpacity={entry.isTotal ? 0.9 : 0.8}
                     />
                   ))}
@@ -224,15 +222,15 @@ export default function SHAPWaterfall({ live }: { live: boolean }) {
 
             <div style={{ display: 'flex', gap: 20, fontSize: 12, color: 'var(--text-2)', borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--teal)', display: 'inline-block' }} />
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent)', display: 'inline-block' }} />
                 Risk-increasing factor
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--red)', display: 'inline-block' }} />
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent)', display: 'inline-block' }} />
                 Discount / risk reduction
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--blue)', display: 'inline-block' }} />
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent)', display: 'inline-block' }} />
                 Total recommended premium
               </span>
             </div>
@@ -244,7 +242,7 @@ export default function SHAPWaterfall({ live }: { live: boolean }) {
             Configure rider profile above and click Calculate Premium to see the XGBoost + LightGBM SHAP breakdown
           </div>
         )}
-      </div>
+      </ChartCard>
     </>
   )
 }

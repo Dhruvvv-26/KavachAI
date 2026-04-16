@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import type { Claim } from '../lib/types'
 import { fetchClaims, approveClaim, blockClaim } from '../lib/api'
+import Badge from './ui/Badge'
+import ChartCard from './ui/ChartCard'
 
 function PhysicsReadout({ scores }: { scores: Claim['layer_scores'] }) {
   const checks = [
@@ -42,9 +44,7 @@ function SelfieCard({ claim, onApprove, onBlock }: {
             {claim.claim_id}
           </div>
         </div>
-        <span className={`badge ${claim.status === 'SOFT_HOLD' ? 'badge-amber' : 'badge-red'}`}>
-          {claim.status.replace('_', ' ')}
-        </span>
+        <Badge variant={claim.status === 'SOFT_HOLD' ? 'warn' : 'danger'}>{claim.status.replace('_', ' ')}</Badge>
       </div>
 
       <div className="selfie-body">
@@ -148,19 +148,22 @@ export default function DualSelfieCheck({ live }: { live: boolean }) {
         </div>
       )}
 
-      <div className="card" style={{ background: 'var(--bg-card-2)', border: '1px solid rgba(245,158,11,0.2)' }}>
+      <ChartCard
+        title="Dual Selfie Protocol"
+        subtitle="Layer 5 Bouncer Extension"
+        action={<Badge variant="warn">SOFT_HOLD</Badge>}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ fontSize: 22 }}>◉</div>
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>Dual Selfie Protocol — Layer 5 Bouncer Extension</div>
-            <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
-              Claims in SOFT_HOLD (score 0.65–0.85) receive a partial payout immediately (50%) while the second 50% is held
-              pending this visual liveness verification. Admin compares the geo-stamped claim selfie vs KYC reference photo.
+            <div style={{ fontWeight: 600, fontSize: 14 }}>Claims in SOFT_HOLD receive a partial payout immediately while the remaining 50% waits on visual liveness verification.</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 6, lineHeight: 1.6 }}>
+              Admin compares the geo-stamped claim selfie vs KYC reference photo.
               Biometric time lock confirms selfie was captured within 5 minutes of the trigger event.
             </div>
           </div>
         </div>
-      </div>
+      </ChartCard>
 
       {loading ? (
         <div className="loading-wrap">
@@ -168,11 +171,13 @@ export default function DualSelfieCheck({ live }: { live: boolean }) {
           <span>Loading SOFT_HOLD queue…</span>
         </div>
       ) : claims.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--teal)', marginBottom: 4 }}>Queue clear</div>
-          <div style={{ fontSize: 13, color: 'var(--text-3)' }}>No claims require manual selfie review. Auto-approval pipeline running cleanly.</div>
-        </div>
+        <ChartCard title="Review Queue" subtitle="No claims currently require manual selfie review">
+          <div style={{ textAlign: 'center', padding: '32px 24px' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--teal)', marginBottom: 4 }}>Queue clear</div>
+            <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Auto-approval pipeline running cleanly.</div>
+          </div>
+        </ChartCard>
       ) : (
         <>
           <div style={{ fontSize: 13, color: 'var(--text-2)' }}>
