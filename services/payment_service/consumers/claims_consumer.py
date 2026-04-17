@@ -183,7 +183,7 @@ class ClaimsPaymentConsumer(KavachAIConsumer):
 
     def __init__(self, producer: KavachAIProducer):
         super().__init__(
-            topics=[settings.topic_claims_approved, "claims.soft_hold"],
+            topics=[settings.topic_claims_approved],
             group_id="payment_consumer",
         )
         self._producer = producer
