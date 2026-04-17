@@ -59,7 +59,10 @@ class KavachAIProducer:
         """Build SASL_SSL kwargs if Kafka security is configured (Aiven)."""
         if not settings.kafka_security_protocol:
             return {}
+        # Aiven uses a self-signed CA — accept it
         ssl_context = ssl_lib.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl_lib.CERT_NONE
         return {
             "security_protocol": settings.kafka_security_protocol,
             "sasl_mechanism": settings.kafka_sasl_mechanism,
@@ -148,6 +151,8 @@ class KavachAIConsumer:
         sasl_kwargs = {}
         if settings.kafka_security_protocol:
             ssl_context = ssl_lib.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl_lib.CERT_NONE
             sasl_kwargs = {
                 "security_protocol": settings.kafka_security_protocol,
                 "sasl_mechanism": settings.kafka_sasl_mechanism,
