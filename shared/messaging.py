@@ -8,6 +8,7 @@ All topics are defined centrally in shared/config.py.
 import json
 import logging
 import ssl as ssl_lib
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -81,8 +82,16 @@ class KavachAIProducer:
             request_timeout_ms=30000,
             **sasl_kwargs,
         )
-        await self._producer.start()
-        logger.info(f"Kafka producer connected to {self._brokers} ✓")
+        for attempt in range(1, 4):
+            try:
+                await self._producer.start()
+                logger.info(f"Kafka producer connected to {self._brokers} ✓")
+                return
+            except Exception as e:
+                logger.warning(f"Kafka producer connect attempt {attempt}/3 failed: {e}")
+                if attempt < 3:
+                    await asyncio.sleep(5 * attempt)
+        logger.error(f"Kafka producer failed to connect after 3 attempts — service will start without Kafka")
 
     async def stop(self) -> None:
         if self._producer:
@@ -158,11 +167,20 @@ class KavachAIConsumer:
             heartbeat_interval_ms=10000,
             **sasl_kwargs,
         )
-        await self._consumer.start()
-        self._running = True
-        logger.info(
-            f"Consumer {self._group_id} subscribed to {self._topics} ✓"
-        )
+        for attempt in range(1, 4):
+            try:
+                await self._consumer.start()
+                self._running = True
+                logger.info(
+                    f"Consumer {self._group_id} subscribed to {self._topics} ✓"
+                )
+                return
+            except Exception as e:
+                logger.warning(f"Kafka consumer connect attempt {attempt}/3 failed: {e}")
+                if attempt < 3:
+                    await asyncio.sleep(5 * attempt)
+        logger.error(f"Kafka consumer {self._group_id} failed to connect after 3 attempts")
+        self._running = False
 
     async def stop(self) -> None:
         self._running = False
