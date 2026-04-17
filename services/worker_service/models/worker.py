@@ -49,7 +49,7 @@ class Worker(Base):
     full_name             = Column(String(100), nullable=False)
     vehicle_type          = Column(Enum("bicycle", "e_bike", "motorcycle", "scooter",
                                         name="vehicle_type"), nullable=False)
-    work_hours_profile    = Column(Enum("full_day", "peak_only", "morning_only", "evening_only",
+    work_hours_profile    = Column(Enum("full_day", "full_time", "peak_only", "morning_only", "evening_only",
                                         name="work_hours_profile"), nullable=False, default="full_day")
     declared_daily_trips  = Column(Integer, nullable=False)
     declared_daily_income = Column(Numeric(8, 2), nullable=False)

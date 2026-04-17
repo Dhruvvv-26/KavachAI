@@ -13,7 +13,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TYPE vehicle_type AS ENUM ('bicycle', 'e_bike', 'motorcycle', 'scooter');
 CREATE TYPE platform_type AS ENUM ('blinkit', 'zepto', 'dunzo', 'swiggy_instamart');
-CREATE TYPE work_hours_profile AS ENUM ('full_day', 'peak_only', 'morning_only', 'evening_only');
+CREATE TYPE work_hours_profile AS ENUM ('full_day', 'full_time', 'peak_only', 'morning_only', 'evening_only');
 CREATE TYPE coverage_tier AS ENUM ('basic', 'standard', 'premium');
 CREATE TYPE policy_status AS ENUM ('active', 'expired', 'cancelled', 'pending_payment');
 CREATE TYPE claim_status AS ENUM ('pending', 'auto_approved', 'soft_hold', 'blocked', 'completed', 'rejected');

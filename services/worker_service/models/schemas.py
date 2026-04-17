@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 VehicleType   = str  # 'bicycle' | 'e_bike' | 'motorcycle' | 'scooter'
 PlatformType  = str  # 'blinkit' | 'zepto' | 'dunzo' | 'swiggy_instamart'
-WorkHours     = str  # 'full_day' | 'peak_only' | 'morning_only' | 'evening_only'
+WorkHours     = str  # 'full_day' | 'full_time' | 'peak_only' | 'morning_only' | 'evening_only'
 KycStatus     = str  # 'pending' | 'verified' | 'rejected'
 
 
