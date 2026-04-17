@@ -61,16 +61,16 @@ export default function LoginGate({ children }: { children: ReactNode }) {
           display: flex;
           align-items: center;
           justify-content: center;
-          background: var(--bg-deep);
+          background: #F1F5F9;
         }
         .login-card {
           width: 100%;
           max-width: 400px;
           padding: 40px;
-          background: var(--bg-card);
-          border: 1px solid var(--border);
-          border-radius: 12px;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+          background: #FFFFFF;
+          border: 1px solid #E2E8F0;
+          border-radius: 16px;
+          box-shadow: 0 4px 24px rgba(0,0,0,0.06);
         }
         .logo-section {
           text-align: center;
@@ -79,36 +79,36 @@ export default function LoginGate({ children }: { children: ReactNode }) {
         .logo-section h1 {
           margin: 8px 0 0;
           font-size: 24px;
-          color: var(--teal);
+          color: #7C3AED;
         }
         .logo-section p {
           margin: 4px 0 0;
-          color: var(--text-2);
+          color: #64748B;
           font-size: 14px;
         }
         .form-group label {
           display: block;
           margin-bottom: 8px;
           font-size: 13px;
-          color: var(--text-2);
+          color: #64748B;
         }
         .form-group input {
           width: 100%;
           padding: 12px;
-          background: var(--bg-base);
-          border: 1px solid var(--border);
-          border-radius: 6px;
-          color: white;
+          background: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          border-radius: 8px;
+          color: #0F172A;
           font-size: 16px;
           font-family: inherit;
         }
         .form-group input:focus {
           outline: none;
-          border-color: var(--teal);
-          box-shadow: 0 0 0 2px rgba(0,201,177,0.2);
+          border-color: #7C3AED;
+          box-shadow: 0 0 0 2px rgba(124,58,237,0.15);
         }
         .login-error {
-          color: var(--red);
+          color: #E11D48;
           font-size: 12px;
           margin-top: 8px;
         }

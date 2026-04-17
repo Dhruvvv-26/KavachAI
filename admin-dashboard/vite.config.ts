@@ -18,12 +18,15 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/api/workers':  { target: 'http://localhost:8001', changeOrigin: true, rewrite: p => p.replace('/api/workers', '/api/v1') },
-      '/api/policies': { target: 'http://localhost:8002', changeOrigin: true, rewrite: p => p.replace('/api/policies', '/api/v1') },
-      '/api/triggers': { target: 'http://localhost:8003', changeOrigin: true, rewrite: p => p.replace('/api/triggers', '/api/v1') },
-      '/api/claims':   { target: 'http://localhost:8004', changeOrigin: true, rewrite: p => p.replace('/api/claims', '/api/v1') },
-      '/api/payments': { target: 'http://localhost:8005', changeOrigin: true, rewrite: p => p.replace('/api/payments', '/api/v1') },
-      '/api/ml':       { target: 'http://localhost:8006', changeOrigin: true, rewrite: p => p.replace('/api/ml', '/api/v1') },
+      '/api/v1/riders':    { target: 'http://localhost:8001', changeOrigin: true },
+      '/api/v1/zones':     { target: 'http://localhost:8001', changeOrigin: true },
+      '/api/v1/policies':  { target: 'http://localhost:8002', changeOrigin: true },
+      '/api/v1/trigger':   { target: 'http://localhost:8003', changeOrigin: true },
+      '/api/v1/claims':    { target: 'http://localhost:8004', changeOrigin: true },
+      '/api/v1/payments':  { target: 'http://localhost:8005', changeOrigin: true },
+      '/api/v1/premium':   { target: 'http://localhost:8006', changeOrigin: true },
+      '/api/v1/fraud':     { target: 'http://localhost:8006', changeOrigin: true },
+      '/api/v1/predict':   { target: 'http://localhost:8006', changeOrigin: true },
     },
   },
 })

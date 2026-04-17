@@ -9,6 +9,9 @@ from datetime import datetime, timezone, timedelta
 import numpy as np
 from fastapi import APIRouter, Query
 
+from fastapi import APIRouter, Query
+import random
+
 logger = logging.getLogger("ml_service")
 router = APIRouter()
 
@@ -33,68 +36,51 @@ async def predict_disruption(
     zone_code: str = Query(..., example="delhi_rohini"),
     days_ahead: int = Query(default=7, ge=1, le=30, example=7),
 ):
-    from main import models
-
-    lstm_model = models.get("lstm_model")
-    lstm_scaler = models.get("lstm_scaler")
-    lstm_meta = models.get("lstm_meta")
-
-    city = ZONE_CITY_MAP.get(zone_code)
-    if city is None:
-        # Try extracting city from zone code prefix
-        for prefix, city_name in [("delhi", "delhi_ncr"), ("mumbai", "mumbai"),
-                                   ("bengaluru", "bengaluru"), ("hyderabad", "hyderabad"),
-                                   ("pune", "pune"), ("kolkata", "kolkata")]:
-            if zone_code.startswith(prefix):
-                city = city_name
-                break
-        if city is None:
-            city = "delhi_ncr"  # default
-
-    if lstm_model is None or lstm_scaler is None or lstm_meta is None:
-        return _rule_based_prediction(zone_code, city, days_ahead)
-
+    import sys
+    import os
+    ml_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../ml'))
+    if ml_path not in sys.path:
+        sys.path.append(ml_path)
+        
     try:
-        import torch
-
-        # Generate a synthetic 15-day sequence for the current conditions
-        now = datetime.now(timezone.utc)
-        seq_len = lstm_meta["sequence_length"]
-        n_features = lstm_meta["input_size"]
-
-        sequence = _generate_recent_sequence(city, now, seq_len)
-
-        # Scale and predict
-        seq_flat = sequence.reshape(-1, n_features)
-        seq_scaled = lstm_scaler.transform(seq_flat).reshape(1, seq_len, n_features)
-
-        with torch.no_grad():
-            prob = float(lstm_model(torch.FloatTensor(seq_scaled)).item())
-
-        # Determine confidence
-        if prob > 0.75 or prob < 0.25:
-            confidence = "high"
-        elif prob > 0.60 or prob < 0.40:
-            confidence = "medium"
-        else:
-            confidence = "low"
-
-        # Determine primary risk
-        primary_risk = _get_primary_risk(city, now.month)
-
-        return {
-            "zone_code": zone_code,
-            "city": city,
-            "prediction_horizon_days": days_ahead,
-            "disruption_probability": round(prob, 4),
-            "confidence": confidence,
-            "primary_risk": primary_risk,
-            "model_version": "lstm_v1",
-        }
-
+        from lstm_loader import lstm_store
+        result = lstm_store.predict_disruption(zone_code, days_ahead)
+        return result
     except Exception as e:
         logger.error(f"LSTM prediction failed: {e}")
+        city = ZONE_CITY_MAP.get(zone_code, "delhi_ncr")
         return _rule_based_prediction(zone_code, city, days_ahead)
+
+@router.get("/disruptions/active")
+async def get_active_disruptions():
+    """Provides active disruptions for the Fraud Queue UI"""
+    # Fetch random or modeled synthetic active disruptions for Phase 3 SOAR Demo
+    return [
+        {
+            "id": "CLM-8829-XR",
+            "worker_name": "Arjun Kumar (Verified)",
+            "zone": "delhi_rohini",
+            "event_type": "Hazardous AQI",
+            "tier": 3,
+            "confidence": 0.987
+        },
+        {
+            "id": "CLM-8830-AB",
+            "worker_name": "Priya Sharma (Verified)",
+            "zone": "mumbai_andheri",
+            "event_type": "Heavy Rainfall",
+            "tier": 1,
+            "confidence": 0.942
+        },
+        {
+            "id": "CLM-8831-ZZ",
+            "worker_name": "Rahul Verma",
+            "zone": "chennai_central",
+            "event_type": "Curfew/Bandh",
+            "tier": 0,
+            "confidence": 0.991
+        }
+    ]
 
 
 def _generate_recent_sequence(city: str, now: datetime, seq_len: int = 15) -> np.ndarray:

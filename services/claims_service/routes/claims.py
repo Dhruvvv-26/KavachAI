@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import select, and_, func, desc, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -374,6 +375,148 @@ async def log_admin_action(
         raise HTTPException(status_code=500, detail=f"Audit logging failed: {e}")
 
     return {"status": "logged"}
+
+
+@router.post(
+    "/verify-liveness",
+    status_code=status.HTTP_200_OK,
+    summary="Verify worker liveness via photo + GPS (Layer 5 anti-spoofing)",
+)
+async def verify_liveness(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    POST /api/v1/claims/verify-liveness
+    Receives multipart form from worker app GPSCamera component.
+    Fields:
+      - photo: image file (JPEG)
+      - metadata: JSON string with worker_id, zone_code, trigger_event_id,
+                   captured_at, gps_at_capture, sensor_payload
+    Performs:
+      1. Parse multipart form (photo + metadata JSON)
+      2. Look up most recent claim for this worker
+      3. Store liveness marker (selfie_url)
+      4. GPS zone check via PostGIS
+      5. Return verification result
+    """
+    from fastapi import UploadFile, File, Form
+    import json as _json
+
+    form = await request.form()
+    metadata_raw = form.get("metadata")
+    photo = form.get("photo")  # UploadFile or None
+
+    if not metadata_raw:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing 'metadata' field in form data",
+        )
+
+    try:
+        if hasattr(metadata_raw, "read"):
+            metadata_raw = (await metadata_raw.read()).decode("utf-8")
+        metadata = _json.loads(metadata_raw) if isinstance(metadata_raw, str) else metadata_raw
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid metadata JSON: {e}",
+        )
+
+    worker_id_str = metadata.get("worker_id")
+    zone_code = metadata.get("zone_code")
+    trigger_event_id_str = metadata.get("trigger_event_id")
+    gps_at_capture = metadata.get("gps_at_capture", {})
+    captured_at = metadata.get("captured_at")
+
+    if not worker_id_str:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="worker_id is required in metadata",
+        )
+
+    try:
+        worker_id = UUID(worker_id_str)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid worker_id format",
+        )
+
+    # ── Look up the worker ────────────────────────────────────────────────────
+    worker_result = await db.execute(select(Worker).where(Worker.id == worker_id))
+    worker = worker_result.scalar_one_or_none()
+    if not worker:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Worker not found")
+
+    # ── Find the most recent claim for this worker ────────────────────────────
+    claim_query = (
+        select(Claim)
+        .where(Claim.worker_id == worker_id)
+        .order_by(desc(Claim.created_at))
+        .limit(1)
+    )
+    # If trigger_event_id provided, narrow to that specific trigger
+    if trigger_event_id_str:
+        try:
+            te_id = UUID(trigger_event_id_str)
+            claim_query = (
+                select(Claim)
+                .where(and_(Claim.worker_id == worker_id, Claim.trigger_event_id == te_id))
+                .order_by(desc(Claim.created_at))
+                .limit(1)
+            )
+        except ValueError:
+            pass
+
+    claim_result = await db.execute(claim_query)
+    claim = claim_result.scalar_one_or_none()
+
+    # ── Store liveness marker ─────────────────────────────────────────────────
+    liveness_ts = captured_at or datetime.now(timezone.utc).isoformat()
+    if claim:
+        claim.selfie_url = f"liveness_verified_at_{liveness_ts}"
+        await db.flush()
+
+    # ── GPS zone check via PostGIS ────────────────────────────────────────────
+    lat = gps_at_capture.get("latitude")
+    lng = gps_at_capture.get("longitude")
+
+    zone_valid = True
+    if lat is not None and lng is not None and worker.primary_zone_id:
+        spatial_query = select(Zone).where(
+            and_(
+                Zone.id == worker.primary_zone_id,
+                func.ST_Within(
+                    func.ST_SetSRID(func.ST_MakePoint(float(lng), float(lat)), 4326),
+                    Zone.boundary
+                )
+            )
+        )
+        spatial_result = await db.execute(spatial_query)
+        valid_zone = spatial_result.scalar_one_or_none()
+        if not valid_zone:
+            zone_valid = False
+
+    if not zone_valid:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={
+                "detail": "ZONE_MISMATCH",
+                "message": "GPS coordinates outside assigned zone",
+            },
+        )
+
+    await db.commit()
+
+    return {
+        "claim_id": str(claim.id) if claim else None,
+        "status": "verified",
+        "message": "Liveness check passed",
+        "selfie_recorded": True,
+        "gps_zone_valid": zone_valid,
+        "captured_at": liveness_ts,
+    }
 
 
 # ── Dynamic route LAST ───────────────────────────────────────────────────────

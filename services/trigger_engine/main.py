@@ -32,6 +32,7 @@ from schedulers.cpcb_poller import CPCBPoller
 from schedulers.ndma_poller import NDMAPoller
 from routes.trigger_test import router as trigger_test_router
 from routes.trigger_status import router as trigger_status_router
+from routes.auth import router as auth_router
 
 configure_logging()
 logger = get_logger(__name__)
@@ -144,9 +145,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_origins=["http://localhost:5173", "https://kavachai-admin.vercel.app", "http://localhost:3000", "http://localhost:3002", "http://localhost:5173", "*"],
+    allow_credentials=True,
+    allow_methods=["http://localhost:3000", "http://localhost:3002", "http://localhost:5173", "*"],
+    allow_headers=["http://localhost:3000", "http://localhost:3002", "http://localhost:5173", "*"],
 )
 
 
@@ -158,6 +160,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
 
 app.include_router(trigger_test_router, prefix="/api/v1/trigger", tags=["Trigger"])
 app.include_router(trigger_status_router, prefix="/api/v1/trigger", tags=["Trigger"])
+app.include_router(auth_router, tags=["Admin Auth"])
 
 metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)

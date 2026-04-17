@@ -3,17 +3,18 @@
  *
  * Displays:
  * - Coverage tier details (Basic/Standard/Premium)
- * - Weekly premium breakdown with SHAP-style factors
+ * - Weekly premium breakdown with SHAP-style factors (LIVE from ML service)
  * - Policy pause/cancel options
  * - Renew button
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert,
+  Alert, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, fonts } from '../lib/theme';
+import { getPremiumBreakdown, calculatePremium } from '../lib/api';
 
 const TIER_DETAILS: Record<string, any> = {
   basic: {
@@ -39,9 +40,78 @@ const TIER_DETAILS: Record<string, any> = {
   },
 };
 
+// ─── SHAP Feature Explanations ────────────────────────────────────────────────
+
+const shapExplanations: Record<string, string> = {
+  base_rate: "Base weekly premium before risk adjustments",
+  zone_aqi_risk: "Delhi has 60+ disruption days per year",
+  city_zone: "Delhi has 60+ disruption days per year",
+  seasonality_month: "This month has historically higher disruption probability",
+  month_seasonality: "This month has historically higher disruption probability",
+  vehicle_type_bicycle: "Bicycle riders face full income loss in rain and AQI events",
+  vehicle_type: "Bicycle riders face full income loss in rain and AQI events",
+  disruption_history_90d: "Recent trigger frequency in this zone",
+  declared_daily_trips: "Higher trip volume = more income at risk per event",
+  avg_daily_earnings: "Daily earnings determine maximum possible loss",
+  historical_rain_events: "This zone had elevated rain events in the past 12 months",
+  historical_aqi_events: "This zone had elevated AQI events in the past 12 months",
+  platform_blinkit_multiplier: "Platform-specific risk factor",
+  coverage_tier_standard: "Standard tier includes all 5 disruption types",
+  coverage_tier: "Standard tier includes all 5 disruption types",
+  monthly_work_days: "More work days = higher exposure risk",
+  new_rider_discount: "New rider introductory discount applied",
+  zone_clustering_adjustment: "Zone clustering reduces overall portfolio risk",
+};
+
 export default function PolicyScreen() {
   const currentTier = 'standard';
   const tier = TIER_DETAILS[currentTier];
+
+  // SHAP breakdown state
+  const [shapBreakdown, setShapBreakdown] = useState<Record<string, number> | null>(null);
+  const [shapPremium, setShapPremium] = useState<number | null>(null);
+  const [shapLoading, setShapLoading] = useState(true);
+  const [shapLive, setShapLive] = useState(false);
+  const [showWhyExpanded, setShowWhyExpanded] = useState(false);
+
+  // Fetch SHAP breakdown on mount
+  useEffect(() => {
+    async function loadShapBreakdown() {
+      setShapLoading(true);
+      try {
+        const result = await getPremiumBreakdown();
+        if (result && (result as any).shap_breakdown) {
+          setShapBreakdown((result as any).shap_breakdown);
+          setShapPremium((result as any).recommended_premium);
+          setShapLive(true);
+        } else {
+          // Fallback: try direct calculatePremium
+          const directResult = await calculatePremium({
+            city: "delhi_ncr",
+            vehicle_type: "bicycle",
+            coverage_tier: "standard",
+            month: new Date().getMonth() + 1,
+            historical_aqi_events_12m: 45,
+            historical_rain_events_12m: 28,
+            disruption_history_90d: 15,
+            declared_daily_trips: 30,
+            avg_daily_earnings: 1100.0,
+            monthly_work_days: 22,
+          });
+          if (directResult && directResult.shap_breakdown) {
+            setShapBreakdown(directResult.shap_breakdown);
+            setShapPremium(directResult.recommended_premium);
+            setShapLive(true);
+          }
+        }
+      } catch (e) {
+        console.error('[PolicyScreen] SHAP fetch error:', e);
+      } finally {
+        setShapLoading(false);
+      }
+    }
+    loadShapBreakdown();
+  }, []);
 
   const handlePause = () => {
     Alert.alert(
@@ -64,6 +134,24 @@ export default function PolicyScreen() {
       ],
     );
   };
+
+  // Sort SHAP by absolute value for display
+  const sortedShap = shapBreakdown
+    ? Object.entries(shapBreakdown).sort(([, a], [, b]) => Math.abs(b) - Math.abs(a))
+    : [];
+
+  // Top 3 contributing factors for "Why this price?"
+  const top3 = sortedShap.slice(0, 3);
+
+  // Calculate max bar width
+  const maxContribution = sortedShap.length > 0
+    ? Math.max(...sortedShap.map(([, v]) => Math.abs(v)))
+    : 1;
+
+  // Total premium
+  const totalPremium = shapPremium || (shapBreakdown
+    ? Object.values(shapBreakdown).reduce((sum, v) => sum + v, 0)
+    : tier.weeklyPremium);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -91,7 +179,7 @@ export default function PolicyScreen() {
           </View>
           <View style={styles.coverageItem}>
             <Text style={styles.coverageLabel}>Weekly Premium</Text>
-            <Text style={styles.coverageValue}>₹{tier.weeklyPremium}</Text>
+            <Text style={styles.coverageValue}>₹{totalPremium.toFixed(2)}</Text>
           </View>
           <View style={styles.coverageItem}>
             <Text style={styles.coverageLabel}>Zone</Text>
@@ -166,39 +254,132 @@ export default function PolicyScreen() {
         </View>
       </View>
 
-      {/* Premium Breakdown — SHAP-style */}
+      {/* SHAP Premium Breakdown */}
       <View style={styles.breakdownCard}>
-        <Text style={styles.sectionTitle}>Premium Breakdown</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={styles.sectionTitle}>Premium Breakdown</Text>
+          {shapLive && (
+            <View style={{
+              backgroundColor: 'rgba(0, 201, 177, 0.15)',
+              paddingHorizontal: 8,
+              paddingVertical: 2,
+              borderRadius: 12,
+            }}>
+              <Text style={{ color: colors.primary, fontSize: 9, fontWeight: '700' }}>LIVE ML</Text>
+            </View>
+          )}
+        </View>
         <Text style={styles.breakdownSubtitle}>
-          Rule-based calculation with SHAP-style transparency
+          {shapLive
+            ? 'XGBoost + LightGBM ensemble — per-feature contribution'
+            : 'Rule-based calculation with SHAP-style transparency'}
         </Text>
 
-        <View style={styles.breakdownRows}>
-          {[
-            { label: 'Base Rate (Delhi NCR)', value: '₹25.00', factor: '1.0×' },
-            { label: 'Zone Risk (Rohini)', value: '₹40.00', factor: '2.6×', highlight: true },
-            { label: 'Seasonal Adjustment', value: '+₹5.10', factor: '1.2×' },
-            { label: 'Platform (Blinkit)', value: '+₹2.50', factor: '1.1×' },
-            { label: 'Tier Uplift', value: '+₹0.00', factor: '1.0×' },
-          ].map((row, idx) => (
-            <View key={idx} style={[styles.breakdownRow,
-              row.highlight && styles.breakdownRowHighlight]}>
-              <View style={styles.breakdownLeft}>
-                <Text style={styles.breakdownLabel}>{row.label}</Text>
-                <Text style={styles.breakdownFactor}>{row.factor}</Text>
-              </View>
-              <Text style={[styles.breakdownValue,
-                row.highlight && { color: colors.primary }]}>
-                {row.value}
-              </Text>
-            </View>
-          ))}
+        {shapLoading ? (
+          <ActivityIndicator color={colors.primary} style={{ marginTop: 20 }} />
+        ) : shapBreakdown ? (
+          <View style={styles.breakdownRows}>
+            {/* SHAP horizontal bar chart */}
+            {sortedShap.map(([feature, value], idx) => {
+              const isPositive = value >= 0;
+              const barWidth = Math.max((Math.abs(value) / maxContribution) * 100, 5);
+              const label = shapExplanations[feature]
+                ? feature.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                : feature.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
-          <View style={styles.breakdownTotal}>
-            <Text style={styles.totalLabel}>Weekly Premium</Text>
-            <Text style={styles.totalValue}>₹67.60</Text>
+              return (
+                <View key={feature} style={styles.shapRow}>
+                  <Text style={styles.shapLabel} numberOfLines={1}>{label}</Text>
+                  <View style={styles.shapBarContainer}>
+                    <View
+                      style={[
+                        styles.shapBar,
+                        {
+                          width: `${barWidth}%`,
+                          backgroundColor: isPositive
+                            ? 'rgba(0, 201, 177, 0.6)'
+                            : 'rgba(239, 68, 68, 0.6)',
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={[
+                    styles.shapValue,
+                    { color: isPositive ? colors.primary : colors.error }
+                  ]}>
+                    {isPositive ? '+' : ''}₹{value.toFixed(2)}
+                  </Text>
+                </View>
+              );
+            })}
+
+            {/* Total */}
+            <View style={styles.breakdownTotal}>
+              <Text style={styles.totalLabel}>Your weekly premium</Text>
+              <Text style={styles.totalValue}>₹{totalPremium.toFixed(2)}</Text>
+            </View>
           </View>
-        </View>
+        ) : (
+          /* Fallback hardcoded breakdown if API unavailable */
+          <View style={styles.breakdownRows}>
+            {[
+              { label: 'Base Rate (Delhi NCR)', value: '₹25.00', factor: '1.0×' },
+              { label: 'Zone Risk (Rohini)', value: '₹40.00', factor: '2.6×', highlight: true },
+              { label: 'Seasonal Adjustment', value: '+₹5.10', factor: '1.2×' },
+              { label: 'Platform (Blinkit)', value: '+₹2.50', factor: '1.1×' },
+              { label: 'Tier Uplift', value: '+₹0.00', factor: '1.0×' },
+            ].map((row, idx) => (
+              <View key={idx} style={[styles.breakdownRow,
+                row.highlight && styles.breakdownRowHighlight]}>
+                <View style={styles.breakdownLeft}>
+                  <Text style={styles.breakdownLabel}>{row.label}</Text>
+                  <Text style={styles.breakdownFactor}>{row.factor}</Text>
+                </View>
+                <Text style={[styles.breakdownValue,
+                  row.highlight && { color: colors.primary }]}>
+                  {row.value}
+                </Text>
+              </View>
+            ))}
+            <View style={styles.breakdownTotal}>
+              <Text style={styles.totalLabel}>Weekly Premium</Text>
+              <Text style={styles.totalValue}>₹67.60</Text>
+            </View>
+          </View>
+        )}
+
+        {/* "Why this price?" expandable section */}
+        {shapBreakdown && top3.length > 0 && (
+          <View style={{ marginTop: spacing.md }}>
+            <TouchableOpacity
+              onPress={() => setShowWhyExpanded(!showWhyExpanded)}
+              style={styles.whyButton}
+            >
+              <Text style={styles.whyButtonText}>
+                {showWhyExpanded ? '▼ Why this price?' : '▶ Why this price?'}
+              </Text>
+            </TouchableOpacity>
+
+            {showWhyExpanded && (
+              <View style={styles.whyContent}>
+                {top3.map(([feature, value], idx) => (
+                  <View key={feature} style={styles.whyRow}>
+                    <Text style={styles.whyNumber}>{idx + 1}.</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.whyFeature}>
+                        {feature.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        {' '}({value >= 0 ? '+' : ''}₹{value.toFixed(2)})
+                      </Text>
+                      <Text style={styles.whyExplanation}>
+                        {shapExplanations[feature] || 'Contributing factor to your premium calculation'}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       {/* Tier Comparison */}
@@ -311,6 +492,39 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   breakdownRows: { gap: spacing.xs },
+  // SHAP bar chart styles
+  shapRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  shapLabel: {
+    color: colors.textDim,
+    fontSize: 11,
+    width: 100,
+    marginRight: 8,
+  },
+  shapBarContainer: {
+    flex: 1,
+    height: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  shapBar: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  shapValue: {
+    width: 60,
+    textAlign: 'right',
+    fontSize: 11,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  // Legacy breakdown styles
   breakdownRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: spacing.sm,
@@ -333,6 +547,42 @@ const styles = StyleSheet.create({
   totalLabel: { color: colors.text, fontSize: fonts.sizes.lg, fontWeight: '700' },
   totalValue: {
     color: colors.primary, fontSize: fonts.sizes.xl, fontWeight: '700',
+  },
+  // "Why this price?" section
+  whyButton: {
+    paddingVertical: 8,
+  },
+  whyButtonText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  whyContent: {
+    backgroundColor: 'rgba(0, 201, 177, 0.05)',
+    borderRadius: 8,
+    padding: 12,
+    gap: 10,
+  },
+  whyRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  whyNumber: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '700',
+    width: 20,
+  },
+  whyFeature: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  whyExplanation: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+    lineHeight: 16,
   },
   tierCompare: {
     backgroundColor: colors.surface,

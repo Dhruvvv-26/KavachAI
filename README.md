@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Hackathon-Guidewire%20DEVTrails%202026-blueviolet?style=for-the-badge"/>
-  <img src="https://img.shields.io/badge/Phase-SCALE%20%E2%80%94%20Phase%202%20Complete-00C9B1?style=for-the-badge"/>
-  <img src="https://img.shields.io/badge/Stack-12%20Containers%20%7C%206%20Microservices%20%7C%2011%20ML%20Models-0A66C2?style=for-the-badge"/>
+  <img src="https://img.shields.io/badge/Phase-SOAR%20%E2%80%94%20Phase%203%20Complete-00C9B1?style=for-the-badge"/>
+  <img src="https://img.shields.io/badge/Stack-13%20Containers%20%7C%206%20Microservices%20%7C%2011%20ML%20Models-0A66C2?style=for-the-badge"/>
   <img src="https://img.shields.io/badge/Crisis%20Response-5--Layer%20Anti--Spoofing%20Live-red?style=for-the-badge"/>
 </p>
 
@@ -483,13 +483,17 @@ policy_id:  21bc33f9-fa75-4a27-983b-df1a1b1fe4f1  (Standard, ₹127.00/week, Max
 Zone:       delhi_rohini  |  centroid lat=28.7300, lon=77.1150
 ```
 
-### Phase 3 — SOAR 🔄 IN PROGRESS (Apr 5–17)
+### Phase 3 — SOAR ✅ COMPLETE (Apr 5–17)
 
 | Deliverable | Target Criteria | Status |
 |---|---|---|
-| Admin Dashboard — React + Vite + Leaflet + CartoDB | Fraud queue, SHAP waterfall charts, Dual-Selfie visual queue, zone heatmap | ✅ Live |
+| Admin Dashboard Components | Live Fraud queue tracking, ML-driven Zone heatmap, Actuarial premium trends chart | ✅ Live |
+| Worker App Sensor Pipeline | 7-layer anti-spoofing payload (RMS, heading changes), robust permissions manager | ✅ Live |
+| Worker App GPS Camera | Multipart FormData upload, fallback logic, FCM trigger modal with countdown | ✅ Live |
+| E2E Integration and Bugfixes | `api/v1/riders` routing, 6 DB columns added (e.g. `gps_score`), BCR calculation fixed | ✅ Live |
+| E2E Testing & Logs | Full end-to-end `docker compose` execution passing; Failure/Diagnosis logs documented | ✅ Complete |
 | NetworkX Louvain clique detection | 150+ rider fraud ring identified within 30s of burst submission | ✅ Live |
-| Additional LSTM training data | 3 years historical CPCB + OpenWeatherMap; test AUC > 0.95 per zone | 🔄 Training |
+| Additional LSTM training data | 3 years historical CPCB + OpenWeatherMap; test AUC > 0.95 per zone | ✅ Complete |
 | Railway.app + Vercel deployment | Public HTTPS URL; judges run without local setup | 🔄 Pending |
 | 5-minute pitch video + final deck | Recorded E2E: trigger → fraud check → payout on physical phone | 🔄 Pending |
 
@@ -512,7 +516,7 @@ curl -s https://kavachai-ml-service-production.up.railway.app/health | python3 -
 # Expected: {"status":"healthy","models_loaded":11}
 
 # Demo endpoints
-curl -s https://kavachai-worker-service-production.up.railway.app/api/v1/workers/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce | python3 -m json.tool
+curl -s https://kavachai-worker-service-production.up.railway.app/api/v1/riders/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce | python3 -m json.tool
 curl -s https://kavachai-policy-service-production.up.railway.app/api/v1/policies/exclusions/reference | python3 -m json.tool
 curl -s https://kavachai-payment-service-production.up.railway.app/api/v1/payments/summary | python3 -m json.tool
 ```
@@ -558,7 +562,7 @@ To securely evaluate the platform with our active API limits and production acco
 ### Step 2 — Build and Start the Stack
 
 ```bash
-# Build all 12 containers and start (first run: 3–5 minutes for ML image download)
+# Build all 13 containers and start (first run: 3–5 minutes for ML image download)
 docker compose up -d --build
 ```
 
@@ -601,7 +605,7 @@ Before simulating triggers, we must register a "test rider" and bind them to an 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install requests psycopg2-binary
+python3 -m pip install requests psycopg2-binary
 python3 scripts/god_mode_demo.py seed
 ```
 
@@ -640,9 +644,10 @@ curl -s -X POST http://localhost:8003/api/v1/trigger/test \
 **👀 What to notice:** 
 1. This hits Redpanda. The `claims-service` consumes it, verifies the simulated GPS coordinates against PostGIS, approves it, and pushes it back to Redpanda. 
 2. The `payment-service` consumes the approval, simulates a Razorpay transaction, and pushes a receipt to Redis. 
-*Verify the final payout notification landed in Redis:*
+*Verify the claim was created and fraud-scored in the database:*
 ```bash
-docker exec redis redis-cli -a redis_secure_2026 --raw LRANGE notifications:all 0 1 2>/dev/null | python3 -m json.tool
+docker exec postgres psql -U kavachai -d kavachai -c "SELECT status, fraud_score, fraud_flags::text FROM claims ORDER BY created_at DESC LIMIT 1;"
+# Expected: auto_approved | 0.05–0.15 | []
 ```
 
 #### Scenario C: The "Hostile Path" (Geofence Fraud Defense)
@@ -704,7 +709,7 @@ docker compose down -v
 # Install required dependencies
 python3 -m venv .venv
 source .venv/bin/activate
-pip install requests psycopg2-binary
+python3 -m pip install requests psycopg2-binary
 
 # Seeds data + runs all 3 scenarios + prints pass/fail for each
 python3 scripts/demo_script.py

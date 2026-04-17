@@ -1,6 +1,6 @@
 # 📱 KavachAI Worker App — Demo Recording Guide
 
-> **✅ STATUS: COMPLETE — Phase 2 mobile ↔ backend integration verified**  
+> **✅ STATUS: COMPLETE — Phase 3 mobile ↔ backend integration verified**  
 > Last updated: 2026-04-04
 
 ---
@@ -40,10 +40,10 @@ EXPO_PUBLIC_ML_SERVICE=http://<YOUR_IP>:8006
 ### Step 3: Start Docker Services
 
 ```bash
-docker compose -f docker-compose.demo.yml up -d
+docker compose up -d
 ```
 
-Verify all 12 containers are healthy:
+Verify all 13 containers are healthy:
 
 ```bash
 docker ps --format "table {{.Names}}\t{{.Status}}"
@@ -114,16 +114,23 @@ Open the Camera app → scan the QR → it opens in Expo Go.
 | Time | Action (Terminal/App) | Narration Script |
 |:---|:---|:---|
 | **T+00s** | **Terminal:** `python3 scripts/god_mode_demo.py trigger --scenario clean` | *"We're starting with a clean scenario. KavachAI just detected a severe AQI spike in Rohini, Delhi via our CPCB sensors."* |
-| **T+02s** | **App:** Show Home Screen | *"On the rider app, Arjun sees 'Coverage Active'. The live AQI is dangerously high at 450, and the temperature is 38 degrees."* |
-| **T+10s** | **App:** Tap 'My Policy' | *"Arjun is protected for just ₹127 a week. Our parametric engine watches for AQI, Rain, Heat, and even City Curfews."* |
-| **T+18s** | **Terminal:** Watch 'Claim Created' logs | *"Back in the logs, you see the claim was auto-approved. A low fraud score of 0.08 means zero manual intervention was needed."* |
-| **T+25s** | **App:** Tap 'Payouts' Tab | *"Instantly, Arjun sees a ₹300 credit in his history. No paperwork, no investigators, just instant relief."* |
-| **T+28s** | **Phone:** Wait for FCM Push | *"And there's the Firebase push notification—Arjun knows his rent is safe before he even finishes his shift."* |
+| **T+02s** | **App:** Show Home Screen | *"On the rider app, our new Phase 3 segmented threshold components display live ML disruption data. The AQI is dangerously high at 450."* |
+| **T+10s** | **Phone:** FCM Notification arrives | *"Instantly, Arjun receives an FCM push notification warning him of the disruption."* |
+| **T+15s** | **App:** 5-Minute Trigger Modal Opens | *"Tapping the notification opens our Phase 3 SOAR trigger modal with a 5-minute countdown. To claim his payout, Arjun must verify his current state."* |
+| **T+20s** | **App:** GPSCamera Capture | *"He uses our newly integrated GPSCamera. The app captures a dual-selfie and bundles it with a 7-layer anti-spoofing payload—including 10Hz accelerometer RMS and heading changes—uploaded securely via multipart FormData."* |
+| **T+28s** | **Terminal:** Watch 'Claim Created' logs | *"Back in the logs, you see the claim and GPSCamera payload processed. A low fraud score of 0.06 means zero manual intervention was needed."* |
 | **T+32s** | **Terminal:** `python3 scripts/god_mode_demo.py trigger --scenario spoofed` | *"Now, let's try to break it. A bad actor in Mumbai is spoofing their GPS to trick our Delhi sensors."* |
-| **T+45s** | **Terminal:** Watch for `BLOCKED` | *"Our Layer 5 defense catches it immediately. Fraud score: 0.89. Hard-blocked. Zero payout."* |
-| **T+50s** | **Terminal:** `curl -s -X POST http://localhost:8006/api/v1/premium/calculate -H "Content-Type: application/json" -d '{"city":"delhi_ncr","vehicle_type":"bicycle","coverage_tier":"standard","month":7,"historical_aqi_events_12m":45,"historical_rain_events_12m":28,"disruption_history_90d":15,"declared_daily_trips":30,"avg_daily_earnings":1100.0,"monthly_work_days":22}' \| python3 -m json.tool` | *"We don't hardcode prices. Here is our live ML engine weighing AQI risk and seasonality to price Arjun's specific zone."* |
-| **T+58s** | **Terminal:** `curl -s http://localhost:8005/api/v1/payments/summary \| python3 -m json.tool` | *"Finally, our actuarial dashboard tracks real-time loss ratios, ensuring KavachAI stays solvent."* |
-| **T+60s** | **STOP RECORDING** | *"ML pricing, parametric triggers, and fraud-proof infrastructure. That is KavachAI."* |
+| **T+45s** | **Terminal:** Watch for `BLOCKED` | *"Our updated Worker App sensor pipeline captures the mock location flag. Fraud score: 0.89. Hard-blocked. Zero payout."* |
+| **T+50s** | **Terminal:** `curl ... premium/calculate` | *"Pricing is dynamic. This is our live ML engine weighing AQI risk and seasonality to calculate premiums."* |
+| **T+58s** | **Terminal:** `curl ... payments/summary` | *"Finally, our actuarial dashboard API tracks real-time loss ratios to ensure solvency."* |
+| **T+62s** | **Browser:** Open `http://localhost:3000` (Admin Dashboard) | *"Here is our Admin Dashboard, the command center for Phase 3."* |
+| **T+65s** | **Browser:** Fraud Queue tab | *"You can see our blocked claim with the new per-layer scores here: gps_score, sensor_score, network_score."* |
+| **T+68s** | **Browser:** SHAP Explainer | *"Switching to the SHAP Explainer, we set Delhi NCR bicycle standard and hit Calculate..."* |
+| **T+72s** | **Browser:** SHAP waterfall renders | *"...the waterfall renders a ₹127/week breakdown across 13 feature bars."* |
+| **T+76s** | **Browser:** Zone Heatmap | *"On the completely integrated Zone Heatmap, delhi_rohini pulses red signaling an active trigger with ML disruption overlays."* |
+| **T+80s** | **Terminal:** `curl -X POST .../clique/run` | *"To defend against organized networks, we trigger our NetworkX Louvain clique detection."* |
+| **T+85s** | **Terminal:** Ring alert displays | *"An alert fires immediately: 80 members detected with a CRITICAL risk level in an 86.9s burst window."* |
+| **T+90s** | **STOP RECORDING** | *"Full Phase 3 stack: worker sensor pipeline, admin dashboard, ML pricing, and Louvain ring detection all running live. That is KavachAI."* |
 
 ---
 

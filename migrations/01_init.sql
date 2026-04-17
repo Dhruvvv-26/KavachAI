@@ -162,6 +162,12 @@ CREATE TABLE claims (
     payout_amount       NUMERIC(8,2) NOT NULL,
     fraud_score         NUMERIC(5,4),               -- 0.0000 – 1.0000
     fraud_flags         JSONB DEFAULT '[]',          -- Array of flag codes
+    gps_score           NUMERIC(5,4),               -- Layer 1 GPS physics score
+    sensor_score        NUMERIC(5,4),               -- Layer 2 device sensor score
+    network_score       NUMERIC(5,4),               -- Layer 3 network geo score
+    behavioral_score    NUMERIC(5,4),               -- Layer 4 behavioral score
+    selfie_url          TEXT,                        -- Layer 5 dual-selfie URL
+    reviewer_note       TEXT,                        -- Admin audit trail note
     worker_gps_at_claim GEOMETRY(POINT, 4326),
     sensor_data         JSONB,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),

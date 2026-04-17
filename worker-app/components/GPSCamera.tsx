@@ -1,3 +1,11 @@
+/**
+ * GPSCamera — Layer 5 Zero-Trust Liveness Lock
+ *
+ * Captures a geo-stamped selfie and POSTs it as multipart/form-data
+ * to the claims service for liveness verification.
+ *
+ * Flow: GPS fix → photo capture → build metadata → POST multipart → handle response
+ */
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -5,27 +13,54 @@ import * as Location from 'expo-location';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, borderRadius, spacing } from '../lib/theme';
+import { SERVICES } from '../lib/api';
+import type { SensorPayload } from '../lib/sensorCapture';
 
-interface GPSCameraPayload {
+// ─── Props Interface ──────────────────────────────────────────────────────────
+
+interface GPSCameraProps {
+  worker_id?: string;
+  zone_code?: string;
+  trigger_event_id?: string;
+  sensor_payload?: SensorPayload;
+  onSuccess?: (claim_id: string) => void;
+  onBlocked?: (reason: string) => void;
+  onDismiss?: () => void;
+  // Legacy props for backward compatibility
+  onCapture?: (payload: LegacyPayload) => void;
+  onCancel?: () => void;
+}
+
+interface LegacyPayload {
   photo_base64: string;
   gps_lat: number;
   gps_lng: number;
   capture_timestamp_ms: number;
 }
 
-interface GPSCameraProps {
-  onCapture: (payload: GPSCameraPayload) => void;
-  onCancel: () => void;
-}
+// ─── Component ────────────────────────────────────────────────────────────────
 
-export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
+export default function GPSCamera({
+  worker_id,
+  zone_code,
+  trigger_event_id,
+  sensor_payload,
+  onSuccess,
+  onBlocked,
+  onDismiss,
+  onCapture,
+  onCancel,
+}: GPSCameraProps) {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [hasLocationPermission, setHasLocationPermission] = useState<boolean | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showRetry, setShowRetry] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
-  const isMounted = useRef(true); // Vuln C: Track mount state to prevent race condition crashes
+  const isMounted = useRef(true);
 
-  // Vuln C: Cleanup — mark unmounted so async callbacks abort safely
+  // Cleanup — mark unmounted so async callbacks abort safely
   useEffect(() => {
     return () => {
       isMounted.current = false;
@@ -50,53 +85,135 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
     if (!cameraRef.current || isProcessing) return;
 
     setIsProcessing(true);
+    setError(null);
+    setShowRetry(false);
+
     try {
-      // First fetch the hardware location
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Highest,
+      // Get GPS coordinate at moment of shutter
+      const gps_at_capture = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
       });
 
-      // Vuln C: Abort if component unmounted during GPS acquisition
       if (!isMounted.current) return;
 
-      // Immediately capture the photo with EXIF data
+      // Capture photo
       const photo = await cameraRef.current.takePictureAsync({
-        exif: true,
-        quality: 0.7,
+        quality: 0.4,
+        base64: false,
+        exif: false,
       });
 
-      if (!photo) throw new Error("Failed to capture photo");
-
-      // Vuln C: Abort if component unmounted during photo capture
+      if (!photo) throw new Error('Failed to capture photo');
       if (!isMounted.current) return;
 
-      // Compress and resize image to prevent 10MB+ payload bloat
+      // Compress and resize
       const manipResult = await ImageManipulator.manipulateAsync(
         photo.uri,
         [{ resize: { width: 640 } }],
         { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
       );
 
-      if (!manipResult.base64) throw new Error("Failed to encode photo to base64");
-
-      // Vuln C: Final mount check before delivering payload to parent
       if (!isMounted.current) return;
 
-      // Bundle and return the secure payload
-      onCapture({
-        photo_base64: manipResult.base64,
-        gps_lat: location.coords.latitude,
-        gps_lng: location.coords.longitude,
-        capture_timestamp_ms: Date.now(),
-      });
-    } catch (error) {
-      console.error('Failed to capture GPS selfie:', error);
+      const capturedAt = new Date().toISOString();
+      const gpsData = {
+        latitude: gps_at_capture.coords.latitude,
+        longitude: gps_at_capture.coords.longitude,
+        accuracy: gps_at_capture.coords.accuracy || 0,
+      };
+
+      // ── If trigger_event_id provided, use multipart upload to claims service ──
+      if (trigger_event_id && worker_id) {
+        const metadata = {
+          worker_id,
+          zone_code: zone_code || 'unknown',
+          trigger_event_id,
+          captured_at: capturedAt,
+          gps_at_capture: gpsData,
+          sensor_payload: sensor_payload || null,
+        };
+
+        // Build FormData for multipart/form-data upload
+        const formData = new FormData();
+
+        // Append photo file
+        formData.append('photo', {
+          uri: photo.uri,
+          type: 'image/jpeg',
+          name: `liveness_${worker_id}_${Date.now()}.jpg`,
+        } as any);
+
+        // Append metadata as JSON string
+        formData.append('metadata', JSON.stringify(metadata));
+
+        try {
+          const response = await fetch(
+            `${SERVICES.claims}/api/v1/claims/verify-liveness`,
+            {
+              method: 'POST',
+              body: formData,
+              headers: {
+                'bypass-tunnel-reminder': 'true',
+                // Note: Do NOT set Content-Type for FormData — browser/RN sets boundary automatically
+              },
+            }
+          );
+
+          if (!isMounted.current) return;
+
+          if (response.ok) {
+            const result = await response.json();
+            setSuccessMessage('✓ Verification Successful');
+            if (onSuccess) {
+              onSuccess(result.claim_id || result.id || 'verified');
+            }
+          } else if (response.status === 403) {
+            const result = await response.json();
+            const reason = result.detail || result.reason || 'Verification failed';
+            setError(`Verification Failed: ${reason}`);
+            if (onBlocked) {
+              onBlocked(reason);
+            }
+          } else {
+            throw new Error(`HTTP ${response.status}`);
+          }
+        } catch (networkErr: any) {
+          if (!isMounted.current) return;
+          // Network error — show retry button, do NOT auto-retry
+          setError('Network error. Check your connection.');
+          setShowRetry(true);
+          console.error('[GPSCamera] Upload error:', networkErr);
+        }
+      } else {
+        // ── Legacy flow: return base64 payload to parent ──
+        if (manipResult.base64 && onCapture) {
+          onCapture({
+            photo_base64: manipResult.base64,
+            gps_lat: gpsData.latitude,
+            gps_lng: gpsData.longitude,
+            capture_timestamp_ms: Date.now(),
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error('[GPSCamera] Capture error:', err);
+      if (isMounted.current) {
+        setError('Failed to capture. Please try again.');
+        setIsProcessing(false);
+      }
+    } finally {
       if (isMounted.current) {
         setIsProcessing(false);
       }
     }
   };
 
+  const handleDismiss = () => {
+    if (onDismiss) onDismiss();
+    else if (onCancel) onCancel();
+  };
+
+  // ── Loading state ──
   if (!cameraPermission || hasLocationPermission === null) {
     return (
       <View style={styles.centerContainer}>
@@ -106,6 +223,7 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
     );
   }
 
+  // ── Permission denied ──
   if (!cameraPermission.granted || hasLocationPermission === false) {
     return (
       <View style={styles.centerContainer}>
@@ -113,23 +231,39 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
         <Text style={styles.errorText}>
           Camera and Location permissions are required for Liveness Verification.
         </Text>
-        <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
+        <TouchableOpacity style={styles.cancelBtn} onPress={handleDismiss}>
           <Text style={styles.cancelBtnText}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
+  // ── Success state ──
+  if (successMessage) {
+    return (
+      <View style={styles.centerContainer}>
+        <Ionicons name="checkmark-circle" size={64} color={colors.success} />
+        <Text style={[styles.statusText, { color: colors.success, fontSize: 20, fontWeight: '700' }]}>
+          {successMessage}
+        </Text>
+        <TouchableOpacity style={styles.cancelBtn} onPress={handleDismiss}>
+          <Text style={styles.cancelBtnText}>Done</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // ── Camera view ──
   return (
     <View style={styles.container}>
-      <CameraView 
-        style={styles.camera} 
+      <CameraView
+        style={styles.camera}
         facing="front"
         ref={cameraRef}
       >
         <View style={styles.overlay}>
           <View style={styles.header}>
-            <TouchableOpacity style={styles.closeButton} onPress={onCancel}>
+            <TouchableOpacity style={styles.closeButton} onPress={handleDismiss}>
               <Ionicons name="close" size={28} color="#FFF" />
             </TouchableOpacity>
             <View style={styles.badge}>
@@ -145,12 +279,23 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
             </Text>
           </View>
 
+          {/* Error display */}
+          {error && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorBannerText}>{error}</Text>
+            </View>
+          )}
+
           <View style={styles.controls}>
             {isProcessing ? (
               <View style={styles.processingContainer}>
                 <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={styles.processingText}>Verifying Location & Liveness...</Text>
               </View>
+            ) : showRetry ? (
+              <TouchableOpacity style={styles.retryButton} onPress={handleCapture}>
+                <Text style={styles.retryButtonText}>Retry Upload</Text>
+              </TouchableOpacity>
             ) : (
               <TouchableOpacity style={styles.captureButton} onPress={handleCapture}>
                 <View style={styles.captureButtonInner} />
@@ -162,6 +307,8 @@ export default function GPSCamera({ onCapture, onCancel }: GPSCameraProps) {
     </View>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -192,6 +339,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderRadius: borderRadius.md,
     backgroundColor: colors.surfaceLight,
+    marginTop: spacing.md,
   },
   cancelBtnText: {
     color: colors.text,
@@ -255,6 +403,20 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.sm,
   },
+  errorBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    borderRadius: 8,
+    padding: 10,
+    marginHorizontal: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+  },
+  errorBannerText: {
+    color: '#FCA5A5',
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '600',
+  },
   controls: {
     alignItems: 'center',
     height: 100,
@@ -281,5 +443,18 @@ const styles = StyleSheet.create({
     color: '#FFF',
     marginTop: spacing.sm,
     fontSize: fonts.sizes.sm,
+  },
+  retryButton: {
+    backgroundColor: 'rgba(245, 158, 11, 0.3)',
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.5)',
+  },
+  retryButtonText: {
+    color: '#F59E0B',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

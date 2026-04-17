@@ -1,867 +1,863 @@
 /**
- * KavachAI Worker App — Home / Coverage Status Screen
- *
- * Displays:
- * - Active policy card (tier, premium, renewal)
- * - Real-time disruption status widget (AQI/rain/heat)
- * - Active trigger banner with pulse animation
- * - Quick stats: payouts this month, coverage days
+ * index.tsx — KavachAI Worker App Home Screen
+ * Rebuilds the Disruption Monitor with live ParameterBars + Phase 3 SOAR data.
+ * Includes: permission handling, FCM trigger events, GPSCamera launch, countdown timer.
  */
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View, Text, ScrollView, StyleSheet, RefreshControl,
-  Animated, Dimensions, Modal, TouchableOpacity, Alert
-} from 'react-native';
-import { useQuery } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
+  ActivityIndicator,
+  Animated,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import {
-  getWorkerProfile, getActivePolicy, getZoneWeather, getWorkerPayments, getWorkerClaims, sendSensorPing, WORKER_ID, SERVICES
-} from '../lib/api';
-import { colors, spacing, borderRadius, fonts, shadows } from '../lib/theme';
-import GPSCamera from '../components/GPSCamera';
+  DEFAULT_THRESHOLDS,
+  ParameterBar,
+} from "../components/ParameterBar";
+import {
+  fetchHomeScreenData,
+  HomeScreenData,
+  PolicyData,
+  SoarDisruptionPayload,
+  TriggerStatus,
+} from "../lib/api";
+import { requestAllPermissions, PermissionStatus } from "../lib/permissionManager";
+import GPSCamera from "../components/GPSCamera";
 
-const { width } = Dimensions.get('window');
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-// ── Dev Overlay: Sensor Telemetry Simulator ─────────────────────────────────
+const POLL_INTERVAL_MS = 10_000; // 10-second polling — matches admin dashboard
+const VERIFICATION_WINDOW_SECONDS = 300; // 5 minutes
 
-function buildCleanPing(): Record<string, any> {
-  const now = Date.now();
-  // Match trigger_test.py "clean" scenario exactly
-  const jitter = () => (Math.random() - 0.5) * 0.00008;  // ~±4m
-  return {
-    gps_pings: Array.from({ length: 5 }, (_, i) => ({
-      lat: 28.7041 + jitter(),
-      lng: 77.1025 + jitter(),
-      accuracy_m: 6 + Math.random() * 12,  // 6–18m (realistic)
-      timestamp: new Date(now + i * 5000).toISOString(),
-    })),
-    gps_cold_start_ms: 800 + Math.floor(Math.random() * 1600),  // 800–2400ms
-    accelerometer_rms: 0.8 + Math.random() * 0.6,  // 0.8–1.4 (cycling)
-    gyroscope_yaw_rate: 0.12 + Math.random() * 0.13,
-    is_mock_location: false,
-    is_developer_mode: false,
-    tower_handoffs_30min: 3 + Math.floor(Math.random() * 4),
-    zone_resident_t_minus_30: true,
-    claims_in_window_same_zone: 1 + Math.floor(Math.random() * 7),
-  };
-}
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
-function buildSpoofedPing(): Record<string, any> {
-  const now = Date.now();
-  // Match trigger_test.py "spoofed" scenario exactly
-  return {
-    gps_pings: Array.from({ length: 5 }, (_, i) => ({
-      lat: 28.7041 + (Math.random() - 0.5) * 0.0000016,  // near-zero variance
-      lng: 77.1025 + (Math.random() - 0.5) * 0.0000016,
-      accuracy_m: 0.1 + Math.random() * 0.4,  // sub-meter (spoofed)
-      timestamp: new Date(now + i * 5000).toISOString(),
-    })),
-    gps_cold_start_ms: 228,  // instant lock — dead giveaway
-    accelerometer_rms: 0.0,  // device stationary
-    gyroscope_yaw_rate: 0.003,
-    is_mock_location: true,
-    is_developer_mode: true,
-    tower_handoffs_30min: 0,
-    zone_resident_t_minus_30: false,
-    claims_in_window_same_zone: 140,
-  };
-}
+function StatusDot({ active }: { active: boolean }) {
+  const pulse = useRef(new Animated.Value(1)).current;
 
-type ToastState = { visible: boolean; text: string; color: string };
-
-function DevOverlay({ workerId }: { workerId: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const [sending, setSending] = useState<'clean' | 'spoofed' | null>(null);
-  const [toast, setToast] = useState<ToastState>({ visible: false, text: '', color: colors.primary });
-  const toastAnim = useRef(new Animated.Value(0)).current;
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const showToast = useCallback((text: string, color: string) => {
-    setToast({ visible: true, text, color });
-    Animated.sequence([
-      Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
-      Animated.delay(3000),
-      Animated.timing(toastAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
-    ]).start(() => setToast(prev => ({ ...prev, visible: false })));
-  }, [toastAnim]);
-
-  // Cleanup interval on unmount
   useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
-
-  const firePing = useCallback(async (scenario: 'clean' | 'spoofed') => {
-    if (sending) return;
-    setSending(scenario);
-
-    // Record the baseline claim count BEFORE sending the ping
-    let baselineCount = 0;
-    try {
-      const existingClaims = await getWorkerClaims();
-      baselineCount = existingClaims?.length ?? 0;
-    } catch { /* ignore */ }
-
-    const payload = scenario === 'clean' ? buildCleanPing() : buildSpoofedPing();
-    const result = await sendSensorPing(payload);
-
-    if (result === null) {
-      showToast('❌ Network error — sensor ping failed', colors.error);
-      setSending(null);
-      return;
-    }
-
-    showToast('📡 Ping sent — awaiting claim decision...', colors.primary);
-
-    // Poll /claims/worker/{id} every 2s for up to 15s looking for a NEW claim
-    let attempts = 0;
-    const maxAttempts = 8;  // 8 × 2s = 16s
-
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(async () => {
-      attempts++;
-      try {
-        const claims = await getWorkerClaims();
-        if (claims && claims.length > baselineCount) {
-          const latest = claims[0]; // newest first
-          const status = latest?.status?.toLowerCase();
-          if (pollRef.current) clearInterval(pollRef.current);
-          setSending(null);
-
-          if (status === 'auto_approved' || status === 'completed') {
-            showToast(`✅ Claim Approved  ₹${latest.payout_amount ?? 300}`, colors.success);
-          } else if (status === 'soft_hold') {
-            showToast(`⚠️ Soft Hold — 50% released, review pending`, colors.warning);
-          } else if (status === 'blocked') {
-            showToast(`🚫 Blocked — Fraud Detected`, colors.error);
-          } else {
-            showToast(`📋 Claim status: ${status}`, colors.textDim);
-          }
-          return;
-        }
-      } catch { /* continue polling */ }
-
-      if (attempts >= maxAttempts) {
-        if (pollRef.current) clearInterval(pollRef.current);
-        setSending(null);
-        showToast('⏱ Timeout — no claim decision received', colors.warning);
-      }
-    }, 2000);
-  }, [sending, showToast, workerId]);
+    if (!active) return;
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.6, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1.0, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [active]);
 
   return (
-    <>
-      {/* Toast Notification */}
-      {toast.visible && (
+    <View style={{ width: 14, height: 14, alignItems: "center", justifyContent: "center" }}>
+      {active && (
         <Animated.View
-          style={[
-            devStyles.toast,
-            {
-              backgroundColor: toast.color, opacity: toastAnim,
-              transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }]
-            },
-          ]}
-        >
-          <Text style={devStyles.toastText}>{toast.text}</Text>
-        </Animated.View>
+          style={{
+            position: "absolute",
+            width: 14,
+            height: 14,
+            borderRadius: 7,
+            backgroundColor: "#1D9E75",
+            opacity: 0.3,
+            transform: [{ scale: pulse }],
+          }}
+        />
       )}
-
-      {/* Floating Toggle Button */}
-      <TouchableOpacity
-        style={devStyles.fab}
-        onPress={() => setExpanded(prev => !prev)}
-        activeOpacity={0.8}
-      >
-        <Ionicons name={expanded ? 'close' : 'bug'} size={20} color="#FFF" />
-      </TouchableOpacity>
-
-      {/* Expanded Overlay Panel */}
-      {expanded && (
-        <View style={devStyles.panel}>
-          <Text style={devStyles.panelTitle}>🛠 Sensor Telemetry</Text>
-          <Text style={devStyles.panelHint}>Fire a sensor ping to the claims pipeline</Text>
-
-          <TouchableOpacity
-            style={[devStyles.pingBtn, { backgroundColor: 'rgba(0, 230, 118, 0.15)', borderColor: colors.success }]}
-            onPress={() => firePing('clean')}
-            disabled={sending !== null}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-            <View style={{ flex: 1 }}>
-              <Text style={[devStyles.pingBtnLabel, { color: colors.success }]}>
-                {sending === 'clean' ? 'Sending…' : 'Simulate Clean Ping'}
-              </Text>
-              <Text style={devStyles.pingBtnHint}>GPS ✓ · Accel 0.8–1.4 · No mock</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[devStyles.pingBtn, { backgroundColor: 'rgba(255, 82, 82, 0.12)', borderColor: colors.error }]}
-            onPress={() => firePing('spoofed')}
-            disabled={sending !== null}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="warning" size={18} color={colors.error} />
-            <View style={{ flex: 1 }}>
-              <Text style={[devStyles.pingBtnLabel, { color: colors.error }]}>
-                {sending === 'spoofed' ? 'Sending…' : 'Simulate Spoofed Ping'}
-              </Text>
-              <Text style={devStyles.pingBtnHint}>Mock GPS · Accel 0.0 · Lock 228ms</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-      )}
-    </>
+      <View
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          backgroundColor: active ? "#1D9E75" : "#52525B",
+        }}
+      />
+    </View>
   );
 }
 
-const devStyles = StyleSheet.create({
-  fab: {
-    position: 'absolute', bottom: 28, right: 16,
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(0, 201, 177, 0.85)',
-    justifyContent: 'center', alignItems: 'center',
-    zIndex: 999, elevation: 20,
-    shadowColor: colors.primary, shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5, shadowRadius: 12,
-  },
-  panel: {
-    position: 'absolute', bottom: 80, right: 16,
-    width: 240,
-    backgroundColor: 'rgba(15, 32, 56, 0.94)',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1, borderColor: 'rgba(0, 201, 177, 0.25)',
-    zIndex: 998, elevation: 18,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4, shadowRadius: 16,
-  },
-  panelTitle: {
-    color: '#FFF', fontSize: 14, fontWeight: '700', marginBottom: 2,
-  },
-  panelHint: {
-    color: colors.textMuted, fontSize: 11, marginBottom: 12,
-  },
-  pingBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingVertical: 10, paddingHorizontal: 10,
-    borderRadius: 10, borderWidth: 1,
-    marginBottom: 8,
-  },
-  pingBtnLabel: {
-    fontSize: 13, fontWeight: '600',
-  },
-  pingBtnHint: {
-    fontSize: 10, color: colors.textMuted, marginTop: 1,
-  },
-  toast: {
-    position: 'absolute', top: 60, left: 20, right: 20,
-    paddingVertical: 12, paddingHorizontal: 16,
-    borderRadius: 12, zIndex: 1000, elevation: 25,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8,
-  },
-  toastText: {
-    color: '#FFF', fontSize: 14, fontWeight: '600', textAlign: 'center',
-  },
-});
+function CoverageCard({ policy }: { policy: PolicyData | null }) {
+  const isActive = policy?.status === "active";
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <Text style={styles.cardTitle}>Coverage</Text>
+        <View style={styles.row}>
+          <StatusDot active={isActive} />
+          <Text
+            style={[
+              styles.statusLabel,
+              { color: isActive ? "#1D9E75" : "#71717A" },
+            ]}
+          >
+            {policy ? (isActive ? "ACTIVE" : policy.status.toUpperCase()) : "—"}
+          </Text>
+        </View>
+      </View>
+      {policy ? (
+        <View style={styles.cardBody}>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Tier</Text>
+            <Text style={styles.metaValue}>
+              {policy.coverage_tier.replace(/_/g, " ").toUpperCase()}
+            </Text>
+          </View>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Weekly premium</Text>
+            <Text style={styles.metaValue}>₹{policy.weekly_premium_inr}</Text>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.skeletonBlock} />
+      )}
+    </View>
+  );
+}
 
-const EVENT_ICONS: Record<string, string> = {
-  aqi: 'cloud',
-  heavy_rain: 'rainy',
-  extreme_heat: 'sunny',
-  cyclone: 'thunderstorm',
-  curfew: 'lock-closed',
-  flood_alert: 'water',
-};
+function SoarHeaderBadge({ soar }: { soar: SoarDisruptionPayload | null }) {
+  if (!soar) return null;
+  const colors: Record<number, { bg: string; text: string; border: string }> = {
+    0: { bg: "#14532D", text: "#86EFAC", border: "#166534" },
+    1: { bg: "#713F12", text: "#FDE68A", border: "#92400E" },
+    2: { bg: "#7F1D1D", text: "#FCA5A5", border: "#991B1B" },
+  };
+  const c = colors[soar.prediction_class] ?? colors[0];
+  return (
+    <View
+      style={[
+        styles.soarBadge,
+        { backgroundColor: c.bg, borderColor: c.border },
+      ]}
+    >
+      <Text style={[styles.soarBadgeText, { color: c.text }]}>
+        ML: {soar.prediction_label} · {Math.round(soar.confidence * 100)}% conf
+      </Text>
+    </View>
+  );
+}
 
-const EVENT_COLORS: Record<string, string> = {
-  aqi: '#FF7043',
-  heavy_rain: '#42A5F5',
-  extreme_heat: '#FFA726',
-  cyclone: '#AB47BC',
-  curfew: '#78909C',
-  flood_alert: '#26C6DA',
-};
+// ─── Permission Modal ─────────────────────────────────────────────────────────
+
+function PermissionModal({
+  visible,
+  onRequestPermissions,
+}: {
+  visible: boolean;
+  onRequestPermissions: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Permissions Required</Text>
+          <Text style={styles.modalBody}>
+            KavachAI needs access to your location and camera to verify your presence
+            in the disruption zone and protect your payouts from fraud.
+          </Text>
+          <Text style={styles.modalBody}>
+            Without these permissions, your claims cannot be processed.
+          </Text>
+          <TouchableOpacity style={styles.modalButton} onPress={onRequestPermissions}>
+            <Text style={styles.modalButtonText}>Grant Permissions</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Background Location Banner ───────────────────────────────────────────────
+
+function BackgroundBanner({
+  visible,
+  onDismiss,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+}) {
+  if (!visible) return null;
+  return (
+    <View style={styles.bgBanner}>
+      <Text style={styles.bgBannerText}>
+        Enable background location for uninterrupted fraud protection
+      </Text>
+      <TouchableOpacity onPress={onDismiss}>
+        <Text style={styles.bgBannerDismiss}>✕</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// ─── Countdown Timer Component ────────────────────────────────────────────────
+
+function Countdown({ seconds }: { seconds: number }) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  const isLow = seconds <= 60;
+  return (
+    <Text style={[styles.countdownText, isLow && { color: "#EF4444" }]}>
+      {mins}:{secs.toString().padStart(2, "0")}
+    </Text>
+  );
+}
+
+// ─── Trigger Event Modal ──────────────────────────────────────────────────────
+
+interface TriggerEventData {
+  type: string;
+  trigger_event_id: string;
+  zone_code: string;
+  event_type: string;
+  metric_value: number;
+}
+
+function TriggerEventModal({
+  visible,
+  event,
+  countdown,
+  onVerifyNow,
+  onDismiss,
+}: {
+  visible: boolean;
+  event: TriggerEventData | null;
+  countdown: number;
+  onVerifyNow: () => void;
+  onDismiss: () => void;
+}) {
+  if (!event) return null;
+  const expired = countdown <= 0;
+  return (
+    <Modal visible={visible} transparent animationType="slide">
+      <View style={styles.modalOverlay}>
+        <View style={styles.triggerCard}>
+          <Text style={styles.triggerTitle}>⚠️ Disruption Detected</Text>
+          <Text style={styles.triggerSubtitle}>
+            {event.event_type.toUpperCase()} alert in {event.zone_code}
+          </Text>
+
+          <View style={styles.triggerMeta}>
+            <View style={styles.triggerMetaRow}>
+              <Text style={styles.triggerMetaLabel}>Event</Text>
+              <Text style={styles.triggerMetaValue}>{event.event_type.toUpperCase()}</Text>
+            </View>
+            <View style={styles.triggerMetaRow}>
+              <Text style={styles.triggerMetaLabel}>Value</Text>
+              <Text style={styles.triggerMetaValue}>{event.metric_value}</Text>
+            </View>
+          </View>
+
+          <View style={styles.countdownContainer}>
+            <Text style={styles.countdownLabel}>
+              {expired ? "Verification window closed" : "Verify within"}
+            </Text>
+            {!expired && <Countdown seconds={countdown} />}
+          </View>
+
+          {!expired ? (
+            <View style={styles.triggerActions}>
+              <TouchableOpacity style={styles.verifyButton} onPress={onVerifyNow}>
+                <Text style={styles.verifyButtonText}>Verify Now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.remindButton} onPress={onDismiss}>
+                <Text style={styles.remindButtonText}>Remind Me Later</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.remindButton} onPress={onDismiss}>
+              <Text style={styles.remindButtonText}>Dismiss</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
-  const [workerId, setWorkerId] = useState<string>(WORKER_ID || '');
+  const [data, setData] = useState<HomeScreenData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [mlOnline, setMlOnline] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Permission state
+  const [permStatus, setPermStatus] = useState<PermissionStatus | null>(null);
+  const [showPermModal, setShowPermModal] = useState(false);
+  const [showBgBanner, setShowBgBanner] = useState(false);
+
+  // Trigger event state
+  const [triggerEvent, setTriggerEvent] = useState<TriggerEventData | null>(null);
+  const [showTriggerModal, setShowTriggerModal] = useState(false);
+  const [countdown, setCountdown] = useState(VERIFICATION_WINDOW_SECONDS);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // GPSCamera state
   const [showCamera, setShowCamera] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const pulseAnim = new Animated.Value(1);
 
+  // ── Permission handling on mount ─────────────────────────────────────────
   useEffect(() => {
-    if (WORKER_ID) setWorkerId(WORKER_ID);
+    async function checkPermissions() {
+      const result = await requestAllPermissions();
+      setPermStatus(result);
+
+      if (!result.all_critical_granted) {
+        setShowPermModal(true);
+      } else if (!result.background_granted) {
+        setShowBgBanner(true);
+      }
+    }
+    checkPermissions();
   }, []);
 
-  // Active trigger pulse animation
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.05,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    animation.start();
-    return () => animation.stop();
+  const handleRequestPermissions = useCallback(async () => {
+    const result = await requestAllPermissions();
+    setPermStatus(result);
+    if (result.all_critical_granted) {
+      setShowPermModal(false);
+      if (!result.background_granted) {
+        setShowBgBanner(true);
+      }
+    }
   }, []);
 
-  // Fetch all dashboard data
-  const { data: dashboardData, refetch, isLoading } = useQuery({
-    queryKey: ['dashboard', workerId],
-    queryFn: async () => {
-      const [policy, claims, payments, trigger] = await Promise.allSettled([
-        getActivePolicy(),
-        getWorkerClaims(),
-        getWorkerPayments(),
-        getZoneWeather(),
-      ]);
+  // ── Data loading ─────────────────────────────────────────────────────────
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    const result = await fetchHomeScreenData();
+    setData(result);
+    setMlOnline(result.soar !== null);
+    setLastUpdated(new Date());
+    setLoading(false);
+    setRefreshing(false);
+  }, []);
 
-      return {
-        policy: policy.status === 'fulfilled' ? policy.value : null,
-        claims: claims.status === 'fulfilled' ? claims.value : [],
-        payments: payments.status === 'fulfilled' ? payments.value : [],
-        triggerStatus: trigger.status === 'fulfilled' ? trigger.value : null,
+  useEffect(() => {
+    load();
+    intervalRef.current = setInterval(() => load(), POLL_INTERVAL_MS);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [load]);
+
+  // ── FCM / Trigger Event simulation listener ──────────────────────────────
+  // In production this would listen to expo-notifications for FCM payloads.
+  // For demo: we check trigger status and simulate if an active event exists.
+  useEffect(() => {
+    if (!data?.triggerStatus) return;
+    const ts = data.triggerStatus as any;
+    if (ts.active_event && ts.event_type && !triggerEvent) {
+      const event: TriggerEventData = {
+        type: "TRIGGER_EVENT",
+        trigger_event_id: `trigger_${Date.now()}`,
+        zone_code: ts.zone_code || "delhi_rohini",
+        event_type: ts.event_type || "aqi",
+        metric_value: ts.current_aqi || ts.current_rain_mm || ts.current_temp_c || 0,
       };
-    },
-    refetchInterval: 10000,
-  });
+      setTriggerEvent(event);
+      setShowTriggerModal(true);
+      setCountdown(VERIFICATION_WINDOW_SECONDS);
+    }
+  }, [data?.triggerStatus]);
 
-  const activePolicy = dashboardData?.policy;
-  const claims = dashboardData?.claims || [];
-  const payments = dashboardData?.payments || [];
-  const triggerStatus = dashboardData?.triggerStatus;
+  // ── Countdown timer ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (showTriggerModal && countdown > 0) {
+      countdownRef.current = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            if (countdownRef.current) clearInterval(countdownRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => {
+        if (countdownRef.current) clearInterval(countdownRef.current);
+      };
+    }
+  }, [showTriggerModal]);
 
-  const activeTriggers = (triggerStatus as any)?.active_trigger_count || 0;
-
-  // Use payments as activity history
-  const latestActivity = payments.slice(0, 3).map((p: any) => ({
-    event_type: 'processing',
-    title: `Payout ${p.status === 'completed' ? 'Credited' : 'Processing'}`,
-    body: `₹${p.payout_amount} for your recent claim.`,
-    sent_at: p.created_at || new Date().toISOString()
-  }));
-
-  const handleClaimPayout = () => {
+  // ── GPSCamera handlers ───────────────────────────────────────────────────
+  const handleVerifyNow = () => {
+    setShowTriggerModal(false);
     setShowCamera(true);
   };
 
-  // Vuln D: Exponential backoff retry for poor 4G networks during storms
-  const retryWithBackoff = async <T,>(
-    fn: () => Promise<T>,
-    maxRetries: number = 3,
-    baseDelayMs: number = 1000,
-  ): Promise<T> => {
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        return await fn();
-      } catch (err: any) {
-        const status = err.response?.status;
-        // Don't retry 4xx client errors — they are deterministic rejections
-        if (status && status >= 400 && status < 500) {
-          throw err;
-        }
-        if (attempt === maxRetries) {
-          throw err;
-        }
-        const delay = baseDelayMs * Math.pow(2, attempt); // 1s, 2s, 4s
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-    throw new Error("Retry exhausted"); // Unreachable, but satisfies TS
-  };
-
-  const onCameraCapture = async (cameraPayload: any) => {
+  const handleCameraCapture = (payload: any) => {
     setShowCamera(false);
-    setIsSubmitting(true);
-
-    try {
-      // Mocking hardware sensors for demo purposes
-      const sensorData = {
-        active_zone_id: (triggerStatus as any)?.zone_id || "demo-zone-id", // Included for Bouncer check
-        accelerometer_rms: 3.5, // moving
-        gyroscope_yaw_rate: 0.2, // standard device handling
-        is_mock_location: false,
-        gps_pings: [
-          { lat: cameraPayload.gps_lat, lng: cameraPayload.gps_lng, accuracy_m: 5, timestamp: Date.now() },
-        ],
-        // Adding the Layer 5 Zero-Trust biometric payload
-        photo_base64: cameraPayload.photo_base64,
-        camera_gps_lat: cameraPayload.gps_lat,
-        camera_gps_lng: cameraPayload.gps_lng,
-        capture_timestamp_ms: cameraPayload.capture_timestamp_ms,
-      };
-
-      // Vuln D: Retry with exponential backoff (1s → 2s → 4s) for network failures
-      const res = await retryWithBackoff(
-        async () => {
-          const response = await fetch(`${SERVICES.claims}/api/v1/claims/sensor_data/${workerId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(sensorData)
-          });
-          if (!response.ok) throw { response, status: response.status, data: await response.json().catch(() => ({})) };
-          return response;
-        }
-      );
-
-      if (res.status === 202) {
-        Alert.alert(
-          "Liveness Verified & Claim Submitted",
-          "Your live selfie, GPS coordinates, and hardware sensors have been securely verified."
-        );
-      }
-    } catch (err: any) {
-      // Handle the 403 ZONE_MISMATCH_REJECTED or STALE capture
-      const msg = err.response?.data?.detail || "Failed to verify liveness and submit claim.";
-      Alert.alert("Verification Failed", msg);
-    } finally {
-      setIsSubmitting(false);
-    }
+    // Success toast handled by the camera component's onCapture
+    console.log("[HomeScreen] GPSCamera capture success:", payload);
+    load(true); // Refresh data
   };
+
+  const handleCameraCancel = () => {
+    setShowCamera(false);
+  };
+
+  const handleTriggerDismiss = () => {
+    setShowTriggerModal(false);
+    if (countdownRef.current) clearInterval(countdownRef.current);
+  };
+
+  // Derive display values with null safety at the boundary
+  const trigger: TriggerStatus | null = data?.triggerStatus ?? null;
+  const soar: SoarDisruptionPayload | null = data?.soar ?? null;
+  const policy: PolicyData | null = data?.policy ?? null;
+
+  // Resolve per-factor ML confidence from SOAR contributing_factors
+  const aqiConf = soar?.contributing_factors?.aqi_probability ?? null;
+  const rainConf = soar?.contributing_factors?.rain_probability ?? null;
+  const heatConf = soar?.contributing_factors?.heat_probability ?? null;
+  const disruptConf = soar?.contributing_factors?.disruption_index ?? null;
+
+  // Policy thresholds override defaults when available
+  const aqiThreshold = policy?.triggers?.aqi_threshold ?? DEFAULT_THRESHOLDS.aqi.critical;
+  const rainThreshold = policy?.triggers?.rain_threshold_mm ?? DEFAULT_THRESHOLDS.rain.critical;
+  const heatThreshold = policy?.triggers?.heat_threshold_c ?? DEFAULT_THRESHOLDS.heat.critical;
 
   return (
-    <>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
-        refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={refetch}
-            tintColor={colors.primary} />
-        }
-      >
-        {/* Active Trigger Banner */}
-        {activeTriggers > 0 && (
-          <Animated.View
-            style={[styles.triggerBanner, { transform: [{ scale: pulseAnim }] }]}
-          >
-            <View style={styles.triggerBannerContent}>
-              <Ionicons name="warning" size={24} color="#FFF" />
-              <View style={styles.triggerBannerText}>
-                <Text style={styles.triggerBannerTitle}>
-                  ⚡ Active Trigger Detected
-                </Text>
-                <Text style={styles.triggerBannerSubtitle}>
-                  {activeTriggers} disruption event(s) in your zone
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.claimButton}
-              onPress={handleClaimPayout}
-              disabled={isSubmitting}
-            >
-              <Text style={styles.claimButtonText}>
-                {isSubmitting ? "Verifying..." : "Claim Payout (Requires Liveness Check)"}
-              </Text>
-            </TouchableOpacity>
-          </Animated.View>
-        )}
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => load(true)}
+          tintColor="#1D9E75"
+        />
+      }
+    >
+      {/* ── Permission Modal ── */}
+      <PermissionModal
+        visible={showPermModal}
+        onRequestPermissions={handleRequestPermissions}
+      />
 
-        <Modal visible={showCamera} animationType="slide">
-          <GPSCamera
-            onCapture={onCameraCapture}
-            onCancel={() => setShowCamera(false)}
-          />
-        </Modal>
+      {/* ── Background Location Banner ── */}
+      <BackgroundBanner
+        visible={showBgBanner}
+        onDismiss={() => setShowBgBanner(false)}
+      />
 
-        {/* Coverage Status Card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.shieldIcon}>
-              <Ionicons name="shield-checkmark" size={28} color={colors.primary} />
-            </View>
-            <View>
-              <Text style={styles.cardTitle}>{activePolicy?.status === 'active' ? 'Coverage Active' : 'Coverage Inactive'}</Text>
-              <Text style={styles.cardSubtitle}>
-                {activePolicy?.tier?.replace(/_/g, ' ')?.toUpperCase() || 'STANDARD TIER'}
-              </Text>
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: activePolicy?.status === 'active' ? 'rgba(0, 230, 118, 0.15)' : 'rgba(255, 82, 82, 0.15)' }]}>
-              <View style={[styles.activeDot, { backgroundColor: activePolicy?.status === 'active' ? colors.success : colors.error }]} />
-              <Text style={[styles.statusText, { color: activePolicy?.status === 'active' ? colors.success : colors.error }]}>
-                {activePolicy?.status?.toUpperCase() || 'INACTIVE'}
-              </Text>
-            </View>
-          </View>
+      {/* ── Trigger Event Modal ── */}
+      <TriggerEventModal
+        visible={showTriggerModal}
+        event={triggerEvent}
+        countdown={countdown}
+        onVerifyNow={handleVerifyNow}
+        onDismiss={handleTriggerDismiss}
+      />
 
-          <View style={styles.coverageDetails}>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Weekly Premium</Text>
-              <Text style={styles.detailValue}>₹{activePolicy?.premium_amount || '0'}</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Max Payout</Text>
-              <Text style={styles.detailValue}>₹{activePolicy?.max_payout_amount || '0'}</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Renewal</Text>
-              <Text style={styles.detailValue}>
-                {activePolicy?.end_date ? new Date(activePolicy.end_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'N/A'}
-              </Text>
-            </View>
-          </View>
-        </View>
+      {/* ── GPSCamera Modal ── */}
+      <Modal visible={showCamera} animationType="slide">
+        <GPSCamera
+          onCapture={handleCameraCapture}
+          onCancel={handleCameraCancel}
+        />
+      </Modal>
 
-        {/* Quick Stats Row */}
-        <View style={styles.statsRow}>
-          <View style={[styles.statCard, { borderLeftColor: colors.success }]}>
-            <Ionicons name="cash" size={20} color={colors.success} />
-            <Text style={styles.statValue}>
-              ₹{claims?.reduce((sum: number, c: any) => sum + ((c?.status === 'completed' || c?.status === 'auto_approved') ? Number(c?.payout_amount || 0) : 0), 0).toFixed(0)}
-            </Text>
-            <Text style={styles.statLabel}>Total Earned</Text>
-          </View>
-          <View style={[styles.statCard, { borderLeftColor: colors.primary }]}>
-            <Ionicons name="calendar" size={20} color={colors.primary} />
-            <Text style={styles.statValue}>
-              {activePolicy ? 'Active' : 'Inactive'}
-            </Text>
-            <Text style={styles.statLabel}>Coverage</Text>
-          </View>
-          <View style={[styles.statCard, { borderLeftColor: colors.warning }]}>
-            <Ionicons name="analytics" size={20} color={colors.warning} />
-            <Text style={styles.statValue}>
-              {claims.length}
-            </Text>
-            <Text style={styles.statLabel}>Total Claims</Text>
-          </View>
-        </View>
-
-        {/* Disruption Monitor */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Disruption Monitor</Text>
-          <Text style={styles.sectionSubtitle}>Your Zone: Delhi Rohini</Text>
-        </View>
-
-        <View style={styles.disruptionGrid}>
-          {[
-            { type: 'aqi', label: 'Air Quality', value: 'AQI 280', status: 'Moderate' },
-            { type: 'heavy_rain', label: 'Rainfall', value: '12mm/hr', status: 'Light' },
-            { type: 'extreme_heat', label: 'Temperature', value: '38°C', status: 'Normal' },
-            { type: 'cyclone', label: 'Wind Speed', value: '15 km/h', status: 'Calm' },
-          ].map((item) => (
-            <View key={item.type} style={styles.disruptionCard}>
-              <Ionicons
-                name={EVENT_ICONS[item.type] as any}
-                size={22}
-                color={EVENT_COLORS[item.type]}
-              />
-              <Text style={styles.disruptionLabel}>{item.label}</Text>
-              <Text style={styles.disruptionValue}>{item.value}</Text>
-              <Text style={styles.disruptionStatus}>{item.status}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Recent Activity */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-        </View>
-
-        {latestActivity.length > 0 ? (
-          latestActivity.map((notif: any, idx: number) => (
-            <View key={idx} style={styles.activityCard}>
-              <View style={styles.activityIcon}>
-                <Ionicons
-                  name={(EVENT_ICONS[notif.event_type] || 'notifications') as any}
-                  size={20}
-                  color={colors.primary}
-                />
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>{notif.title}</Text>
-                <Text style={styles.activityBody}>{notif.body}</Text>
-                <Text style={styles.activityTime}>
-                  {new Date(notif.sent_at).toLocaleString('en-IN')}
-                </Text>
-              </View>
-            </View>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons name="shield" size={48} color={colors.textMuted} />
-            <Text style={styles.emptyText}>
-              No disruption events yet. You're protected!
-            </Text>
-          </View>
-        )}
-
-        {/* Brand Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Income protection. Automatic. Instant.
+      {/* ── Top bar ── */}
+      <View style={styles.topBar}>
+        <View>
+          <Text style={styles.screenTitle}>KavachAI</Text>
+          <Text style={styles.screenSubtitle}>
+            {data?.worker?.name ?? "Loading..."}
+            {data?.worker?.zone_code ? ` · ${data.worker.zone_code}` : ""}
           </Text>
-          <Text style={styles.footerVersion}>KavachAI v3.0 — Phase 3 (ML-Powered)</Text>
         </View>
-      </ScrollView>
+        <View style={styles.mlIndicator}>
+          <StatusDot active={mlOnline} />
+          <Text style={[styles.mlLabel, { color: mlOnline ? "#1D9E75" : "#71717A" }]}>
+            ML {mlOnline ? "Online" : "Offline"}
+          </Text>
+        </View>
+      </View>
 
-      {/* Dev Overlay — only visible in development builds */}
-      {__DEV__ && <DevOverlay workerId={workerId} />}
-    </>
+      {/* ── SOAR Tier Badge ── */}
+      <SoarHeaderBadge soar={soar} />
+
+      {/* ── Coverage card ── */}
+      <CoverageCard policy={policy} />
+
+      {/* ── Disruption Monitor ── */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Disruption Monitor</Text>
+        {lastUpdated && (
+          <Text style={styles.sectionMeta}>
+            {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </Text>
+        )}
+      </View>
+
+      {loading ? (
+        <ActivityIndicator color="#1D9E75" style={{ marginTop: 24 }} />
+      ) : (
+        <>
+          <ParameterBar
+            label="Air Quality Index"
+            type="aqi"
+            currentValue={trigger?.current_aqi}
+            thresholds={{
+              ...DEFAULT_THRESHOLDS.aqi,
+              critical: aqiThreshold,
+            }}
+            mlConfidence={aqiConf}
+            mlTierLabel={
+              (aqiConf ?? 0) >= 0.7
+                ? soar?.prediction_label
+                : undefined
+            }
+          />
+
+          <ParameterBar
+            label="Rainfall"
+            type="rain"
+            currentValue={trigger?.current_rain_mm}
+            thresholds={{
+              ...DEFAULT_THRESHOLDS.rain,
+              critical: rainThreshold,
+            }}
+            mlConfidence={rainConf}
+          />
+
+          <ParameterBar
+            label="Heat Index"
+            type="heat"
+            currentValue={trigger?.current_temp_c}
+            thresholds={{
+              ...DEFAULT_THRESHOLDS.heat,
+              critical: heatThreshold,
+            }}
+            mlConfidence={heatConf}
+          />
+
+          <ParameterBar
+            label="Overall Disruption Risk"
+            type="disruption"
+            currentValue={disruptConf}
+            thresholds={DEFAULT_THRESHOLDS.disruption}
+            mlConfidence={soar?.confidence}
+            mlTierLabel={soar?.prediction_label}
+          />
+        </>
+      )}
+
+      {/* ── Quick actions ── */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+      </View>
+      <View style={styles.actionsRow}>
+        <TouchableOpacity style={styles.actionBtn}>
+          <Text style={styles.actionBtnText}>My Payouts</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionBtn}>
+          <Text style={styles.actionBtnText}>My Policy</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: "#09090B", // zinc-950
   },
-  contentContainer: {
-    padding: spacing.md,
-    paddingBottom: spacing.xxl,
+  content: {
+    padding: 16,
+    paddingBottom: 40,
   },
-  triggerBanner: {
-    backgroundColor: '#C62828',
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    ...shadows.glow,
-    shadowColor: '#FF5252',
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
+    marginTop: 8,
   },
-  triggerBannerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+  screenTitle: {
+    fontSize: 22,
+    fontWeight: "600",
+    color: "#F4F4F5",
+    letterSpacing: -0.3,
   },
-  triggerBannerText: {
-    flex: 1,
-  },
-  triggerBannerTitle: {
-    color: '#FFF',
-    fontSize: fonts.sizes.lg,
-    fontWeight: '700',
-  },
-  triggerBannerSubtitle: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: fonts.sizes.sm,
+  screenSubtitle: {
+    fontSize: 12,
+    color: "#71717A",
     marginTop: 2,
   },
-  claimButton: {
-    backgroundColor: '#FFF',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.sm,
-    marginTop: spacing.md,
-    alignItems: 'center',
+  mlIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#18181B",
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 0.5,
+    borderColor: "#3F3F46",
   },
-  claimButtonText: {
-    color: '#C62828',
-    fontSize: fonts.sizes.sm,
-    fontWeight: '700',
+  mlLabel: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  soarBadge: {
+    borderRadius: 8,
+    borderWidth: 0.5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginBottom: 12,
+    alignSelf: "stretch",
+  },
+  soarBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    letterSpacing: 0.2,
   },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    ...shadows.card,
-    marginBottom: spacing.md,
+    backgroundColor: "#18181B",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 0.5,
+    borderColor: "#3F3F46",
   },
   cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  shieldIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(0, 201, 177, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
   },
   cardTitle: {
-    color: colors.text,
-    fontSize: fonts.sizes.xl,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#A1A1AA",
+    letterSpacing: 0.3,
   },
-  cardSubtitle: {
-    color: colors.textDim,
-    fontSize: fonts.sizes.sm,
+  cardBody: {
+    gap: 6,
   },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 'auto',
-    backgroundColor: 'rgba(0, 230, 118, 0.15)',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: borderRadius.pill,
-    gap: 4,
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
   },
-  activeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.success,
+  statusLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.5,
   },
-  statusText: {
-    color: colors.success,
-    fontSize: fonts.sizes.xs,
-    fontWeight: '700',
-    letterSpacing: 1,
+  metaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
-  coverageDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  metaLabel: {
+    fontSize: 12,
+    color: "#71717A",
   },
-  detailItem: {
-    flex: 1,
-    alignItems: 'center',
+  metaValue: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#F4F4F5",
   },
-  detailLabel: {
-    color: colors.textMuted,
-    fontSize: fonts.sizes.xs,
-    marginBottom: 4,
-  },
-  detailValue: {
-    color: colors.text,
-    fontSize: fonts.sizes.md,
-    fontWeight: '700',
-  },
-  divider: {
-    width: 1,
-    backgroundColor: colors.border,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    borderLeftWidth: 3,
-    alignItems: 'center',
-    gap: 4,
-  },
-  statValue: {
-    color: colors.text,
-    fontSize: fonts.sizes.lg,
-    fontWeight: '700',
-  },
-  statLabel: {
-    color: colors.textMuted,
-    fontSize: fonts.sizes.xs,
-    textAlign: 'center',
+  skeletonBlock: {
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: "#27272A",
   },
   sectionHeader: {
-    marginBottom: spacing.md,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    marginTop: 16,
+    marginBottom: 10,
   },
   sectionTitle: {
-    color: colors.text,
-    fontSize: fonts.sizes.lg,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#71717A",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
-  sectionSubtitle: {
-    color: colors.textDim,
-    fontSize: fonts.sizes.sm,
-    marginTop: 2,
+  sectionMeta: {
+    fontSize: 11,
+    color: "#52525B",
   },
-  disruptionGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
+  actionsRow: {
+    flexDirection: "row",
+    gap: 10,
   },
-  disruptionCard: {
-    width: (width - spacing.md * 2 - spacing.sm) / 2 - 1,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    alignItems: 'center',
-    gap: 4,
+  actionBtn: {
+    flex: 1,
+    backgroundColor: "#18181B",
+    borderRadius: 10,
+    borderWidth: 0.5,
+    borderColor: "#3F3F46",
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  actionBtnText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#2DD4BF", // teal-400
+  },
+  // Permission modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.85)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: "#18181B",
+    borderRadius: 16,
+    padding: 24,
+    width: "100%",
+    maxWidth: 360,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "#3F3F46",
   },
-  disruptionLabel: {
-    color: colors.textDim,
-    fontSize: fonts.sizes.xs,
-    marginTop: 4,
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#F4F4F5",
+    marginBottom: 12,
+    textAlign: "center",
   },
-  disruptionValue: {
-    color: colors.text,
-    fontSize: fonts.sizes.md,
-    fontWeight: '700',
+  modalBody: {
+    fontSize: 14,
+    color: "#A1A1AA",
+    marginBottom: 12,
+    lineHeight: 20,
+    textAlign: "center",
   },
-  disruptionStatus: {
-    color: colors.textMuted,
-    fontSize: fonts.sizes.xs,
+  modalButton: {
+    backgroundColor: "#00C9B1",
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 8,
   },
-  activityCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
+  modalButtonText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "700",
   },
-  activityIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 201, 177, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  // Background banner
+  bgBanner: {
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: "rgba(245, 158, 11, 0.3)",
+    padding: 10,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  activityContent: {
+  bgBannerText: {
+    color: "#F59E0B",
+    fontSize: 11,
+    fontWeight: "500",
     flex: 1,
   },
-  activityTitle: {
-    color: colors.text,
-    fontSize: fonts.sizes.md,
-    fontWeight: '600',
+  bgBannerDismiss: {
+    color: "#F59E0B",
+    fontSize: 16,
+    fontWeight: "700",
+    paddingHorizontal: 8,
   },
-  activityBody: {
-    color: colors.textDim,
-    fontSize: fonts.sizes.sm,
-    marginTop: 2,
+  // Trigger event modal
+  triggerCard: {
+    backgroundColor: "#18181B",
+    borderRadius: 16,
+    padding: 24,
+    width: "100%",
+    maxWidth: 380,
+    borderWidth: 1,
+    borderColor: "#EF4444",
   },
-  activityTime: {
-    color: colors.textMuted,
-    fontSize: fonts.sizes.xs,
-    marginTop: 4,
+  triggerTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#F4F4F5",
+    textAlign: "center",
+    marginBottom: 8,
   },
-  emptyState: {
-    alignItems: 'center',
-    padding: spacing.xl,
-    gap: spacing.md,
+  triggerSubtitle: {
+    fontSize: 14,
+    color: "#A1A1AA",
+    textAlign: "center",
+    marginBottom: 20,
   },
-  emptyText: {
-    color: colors.textMuted,
-    fontSize: fonts.sizes.md,
-    textAlign: 'center',
+  triggerMeta: {
+    backgroundColor: "#27272A",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    gap: 8,
   },
-  footer: {
-    alignItems: 'center',
-    paddingTop: spacing.xl,
-    gap: 4,
+  triggerMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
-  footerText: {
-    color: colors.textDim,
-    fontSize: fonts.sizes.sm,
-    fontStyle: 'italic',
+  triggerMetaLabel: {
+    fontSize: 12,
+    color: "#71717A",
   },
-  footerVersion: {
-    color: colors.textMuted,
-    fontSize: fonts.sizes.xs,
+  triggerMetaValue: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#F4F4F5",
+  },
+  countdownContainer: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  countdownLabel: {
+    fontSize: 12,
+    color: "#71717A",
+    marginBottom: 4,
+  },
+  countdownText: {
+    fontSize: 36,
+    fontWeight: "700",
+    color: "#F59E0B",
+    fontVariant: ["tabular-nums"],
+  },
+  triggerActions: {
+    gap: 10,
+  },
+  verifyButton: {
+    backgroundColor: "#00C9B1",
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  verifyButtonText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  remindButton: {
+    borderWidth: 1,
+    borderColor: "#3F3F46",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  remindButtonText: {
+    color: "#A1A1AA",
+    fontSize: 14,
+    fontWeight: "500",
   },
 });

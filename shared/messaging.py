@@ -7,6 +7,7 @@ All topics are defined centrally in shared/config.py.
 """
 import json
 import logging
+import ssl as ssl_lib
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -53,7 +54,21 @@ class KavachAIProducer:
         self._producer: AIOKafkaProducer | None = None
         self._brokers = settings.redpanda_brokers
 
+    def _build_sasl_kwargs(self) -> dict:
+        """Build SASL_SSL kwargs if Kafka security is configured (Aiven)."""
+        if not settings.kafka_security_protocol:
+            return {}
+        ssl_context = ssl_lib.create_default_context()
+        return {
+            "security_protocol": settings.kafka_security_protocol,
+            "sasl_mechanism": settings.kafka_sasl_mechanism,
+            "sasl_plain_username": settings.kafka_sasl_username,
+            "sasl_plain_password": settings.kafka_sasl_password,
+            "ssl_context": ssl_context,
+        }
+
     async def start(self) -> None:
+        sasl_kwargs = self._build_sasl_kwargs()
         self._producer = AIOKafkaProducer(
             bootstrap_servers=self._brokers,
             value_serializer=lambda v: json.dumps(v).encode("utf-8"),
@@ -64,9 +79,10 @@ class KavachAIProducer:
             linger_ms=5,          # Small batching window
             retry_backoff_ms=100,
             request_timeout_ms=30000,
+            **sasl_kwargs,
         )
         await self._producer.start()
-        logger.info(f"Redpanda producer connected to {self._brokers} ✓")
+        logger.info(f"Kafka producer connected to {self._brokers} ✓")
 
     async def stop(self) -> None:
         if self._producer:
@@ -120,6 +136,16 @@ class KavachAIConsumer:
         self._running = False
 
     async def start(self) -> None:
+        sasl_kwargs = {}
+        if settings.kafka_security_protocol:
+            ssl_context = ssl_lib.create_default_context()
+            sasl_kwargs = {
+                "security_protocol": settings.kafka_security_protocol,
+                "sasl_mechanism": settings.kafka_sasl_mechanism,
+                "sasl_plain_username": settings.kafka_sasl_username,
+                "sasl_plain_password": settings.kafka_sasl_password,
+                "ssl_context": ssl_context,
+            }
         self._consumer = AIOKafkaConsumer(
             *self._topics,
             bootstrap_servers=settings.redpanda_brokers,
@@ -130,6 +156,7 @@ class KavachAIConsumer:
             max_poll_records=100,
             session_timeout_ms=30000,
             heartbeat_interval_ms=10000,
+            **sasl_kwargs,
         )
         await self._consumer.start()
         self._running = True

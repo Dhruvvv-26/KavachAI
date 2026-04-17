@@ -68,56 +68,21 @@ def load_models():
         else:
             logger.warning(f"Model file not found: {path} — using fallback")
 
-    # Load PyTorch LSTM separately
-    lstm_path = os.path.join(MODEL_DIR, "lstm_disruption.pt")
-    if os.path.exists(lstm_path) and models["lstm_meta"] is not None:
-        try:
-            import torch
-            import torch.nn as nn
-
-            meta = models["lstm_meta"]
-
-            class KavachAILSTM(nn.Module):
-                def __init__(self, input_size=9, hidden_size=64, num_layers=2, dropout=0.2):
-                    super().__init__()
-                    self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size,
-                                       num_layers=num_layers, dropout=dropout, batch_first=True)
-                    self.dropout = nn.Dropout(dropout)
-                    self.fc1 = nn.Linear(hidden_size, 32)
-                    self.relu = nn.ReLU()
-                    self.fc2 = nn.Linear(32, 1)
-                    self.sigmoid = nn.Sigmoid()
-
-                def forward(self, x):
-                    lstm_out, _ = self.lstm(x)
-                    last = lstm_out[:, -1, :]
-                    out = self.dropout(last)
-                    out = self.fc1(out)
-                    out = self.relu(out)
-                    out = self.fc2(out)
-                    return self.sigmoid(out).squeeze(-1)
-
-            model = KavachAILSTM(
-                input_size=meta.get("input_size", 9),
-                hidden_size=meta.get("hidden_size", 64),
-                num_layers=meta.get("num_layers", 2),
-                dropout=meta.get("dropout", 0.2),
-            )
-            model.load_state_dict(torch.load(lstm_path, map_location="cpu", weights_only=True))
-            model.eval()
-            models["lstm_model"] = model
-            logger.info(f"Loaded LSTM model: lstm_disruption.pt")
-        except Exception as e:
-            logger.warning(f"Failed to load LSTM model: {e}")
-    else:
-        logger.warning("LSTM model file not found — prediction endpoint will return fallback")
+    # Ensure ml directory is on sys path so we can import lstm_loader
+    ml_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'ml'))
+    if ml_path not in sys.path:
+        sys.path.append(ml_path)
+    
+    from lstm_loader import lstm_store
+    lstm_count = lstm_store.load_all()
+    models["lstm_count"] = lstm_count
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_models()
-    loaded = sum(1 for v in models.values() if v is not None)
-    logger.info(f"ML Service started — {loaded}/{len(models)} models loaded")
+    loaded = sum(1 for v in models.values() if v is not None) + models.get("lstm_count", 0) - 1 # -1 because we count 'lstm_count' entry
+    logger.info(f"ML Service started — {loaded} models loaded")
     
     scheduler = AsyncIOScheduler()
     scheduler.start()
@@ -137,10 +102,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "https://kavachai-admin.vercel.app", "http://localhost:3000", "http://localhost:3002", "http://localhost:5173", "*"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["http://localhost:3000", "http://localhost:3002", "http://localhost:5173", "*"],
+    allow_headers=["http://localhost:3000", "http://localhost:3002", "http://localhost:5173", "*"],
 )
 
 # Import and register routes
@@ -154,6 +119,10 @@ app.include_router(fraud_router, prefix="/api/v1/fraud", tags=["Fraud"])
 app.include_router(prediction_router, prefix="/api/v1/predict", tags=["Prediction"])
 app.include_router(clique_router, prefix="/api/v1/clique")
 
+# Direct mount for dashboard integration without predictable prefix
+from routes.prediction import get_active_disruptions
+app.add_api_route("/api/v1/disruptions/active", get_active_disruptions, methods=["GET"], tags=["UI Endpoint"])
+
 
 @app.get("/health")
 async def health():
@@ -162,8 +131,8 @@ async def health():
         "status": "healthy",
         "service": "ml-service",
         "models_loaded": loaded,
-        "models_total": len(models),
-        "premium_ready": models["premium_xgb"] is not None,
-        "fraud_ready": models["gb_fraud"] is not None,
-        "lstm_ready": models["lstm_model"] is not None,
+        "models_total": len([k for k in models.keys() if k != "lstm_count"]) + 3, # Add 3 for the phase 3 LSTMs
+        "premium_ready": models.get("premium_xgb") is not None,
+        "fraud_ready": models.get("gb_fraud") is not None,
+        "lstm_ready": models.get("lstm_count", 0) > 0,
     }

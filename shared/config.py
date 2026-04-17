@@ -4,6 +4,8 @@ Loaded via pydantic-settings from environment variables.
 All services import from this module.
 """
 from functools import lru_cache
+
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +14,8 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
+        populate_by_name=True,
     )
 
     # ── App ───────────────────────────────────────────────
@@ -30,8 +34,26 @@ class Settings(BaseSettings):
     db_max_overflow: int = 20
     db_pool_timeout: int = 30
 
+    # ── DATABASE_URL override (Railway injects a single URL) ────
+    database_url_override: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "DATABASE_URL_OVERRIDE", "DATABASE_URL", "database_url_override",
+        ),
+    )
+
     @property
     def database_url(self) -> str:
+        if self.database_url_override:
+            url = self.database_url_override
+            # asyncpg requires postgresql:// not postgres://
+            if url.startswith("postgres://"):
+                url = "postgresql://" + url[len("postgres://"):]
+            # Add asyncpg driver if not present
+            if "postgresql://" in url and "+asyncpg" not in url:
+                url = url.replace("postgresql://", "postgresql+asyncpg://")
+            return url
+        # Fall back to component-based URL (local dev)
         return (
             f"postgresql+asyncpg://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
@@ -39,6 +61,16 @@ class Settings(BaseSettings):
 
     @property
     def database_url_sync(self) -> str:
+        if self.database_url_override:
+            url = self.database_url_override
+            if url.startswith("postgres://"):
+                url = "postgresql://" + url[len("postgres://"):]
+            # Use psycopg2 driver for sync
+            if "+asyncpg" in url:
+                url = url.replace("+asyncpg", "+psycopg2")
+            elif "postgresql://" in url and "+psycopg2" not in url:
+                url = url.replace("postgresql://", "postgresql+psycopg2://")
+            return url
         return (
             f"postgresql+psycopg2://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
@@ -49,7 +81,18 @@ class Settings(BaseSettings):
     redis_cache_ttl_seconds: int = 600  # 10 minutes
 
     # ── Redpanda / Kafka ───────────────────────────────────
-    redpanda_brokers: str = "localhost:9092"
+    redpanda_brokers: str = Field(
+        default="localhost:9092",
+        validation_alias=AliasChoices(
+            "KAFKA_BOOTSTRAP_SERVERS", "REDPANDA_BROKERS", "redpanda_brokers",
+        ),
+    )
+
+    # Kafka SASL fields (for Aiven / production)
+    kafka_sasl_username: str = ""
+    kafka_sasl_password: str = ""
+    kafka_security_protocol: str = ""   # Set to SASL_SSL in production
+    kafka_sasl_mechanism: str = "PLAIN" # Aiven uses PLAIN
 
     # Kafka Topics
     topic_raw_external_events: str = "raw.external.events"
@@ -112,16 +155,18 @@ class Settings(BaseSettings):
 
     # ── Cyclone Trigger thresholds ─────────────────────────────
     cyclone_tier1_threshold_kmh: float = 55.0
-    cyclone_tier2_threshold_kmh: float = 80.0
+    cyclone_tier2_threshold_kmh: float = 85.0
     cyclone_tier3_threshold_kmh: float = 110.0
     cyclone_tier1_payout: int = 250
     cyclone_tier2_payout: int = 450
     cyclone_tier3_payout: int = 750
 
-    # ── Curfew Trigger thresholds (mocked for Phase 2) ────────
+    # ── Curfew Trigger thresholds (SOAR Actuarial Rules) ──────
     curfew_tier1_payout: int = 200
     curfew_tier2_payout: int = 400
     curfew_tier3_payout: int = 700
+    curfew_tier1_duration_expected: int = 4
+    curfew_tier3_duration_expected: int = 24
 
     # ── KavachAI Business Rules ───────────────────────────
     # Cities covered in Phase 1

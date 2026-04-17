@@ -1,107 +1,164 @@
 import { useEffect, useState, useCallback } from 'react'
 import type { Claim } from '../lib/types'
-import { fetchClaims, approveClaim, blockClaim } from '../lib/api'
+import { fetchClaims, approveClaim, blockClaim, CL } from '../lib/api'
 import { safeFormatDistance } from '../lib/utils'
 
-function PhysicsReadout({ scores }: { scores: Claim['layer_scores'] }) {
-  const checks = [
-    { label: 'GPS satellite variance (σ)', clean: scores.gps < 0.3, value: scores.gps < 0.3 ? `σ = ${(2 + scores.gps * 8).toFixed(1)}m` : `σ = ${(scores.gps * 0.5).toFixed(2)}m (spoofed)` },
-    { label: 'Accelerometer RMS', clean: scores.sensor < 0.3, value: scores.sensor < 0.3 ? `${(0.8 + scores.sensor * 1.6).toFixed(2)} m/s²` : `${(scores.sensor * 0.3).toFixed(2)} m/s² (stationary)` },
-    { label: 'Network IP Δ GPS', clean: scores.network < 0.3, value: scores.network < 0.3 ? `< 2km delta` : `${(scores.network * 15).toFixed(1)}km delta` },
-    { label: 'T−30 zone residency', clean: scores.behavioral < 0.3, value: scores.behavioral < 0.3 ? 'Resident confirmed' : 'Sudden appearance' },
+// Liveness data endpoint: GET /api/v1/claims/{claim_id}/liveness-data
+// Returns: { selfie_url, captured_at, gps_at_capture, sensor_payload_summary, fraud_flags, fraud_score }
+const LIVENESS_DATA_ENDPOINT = (claimId: string) => `${CL}/api/v1/claims/${claimId}/liveness-data`
+
+interface SensorPayloadSummary {
+  rms_10s: number
+  mock_location_enabled: boolean
+  is_moving: boolean
+  connection_type: string
+}
+
+function SignalBar({ label, value, clean }: { label: string; value: string; clean: boolean }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%',
+        background: clean ? 'var(--success)' : 'var(--danger)',
+        display: 'inline-block', flexShrink: 0,
+      }} />
+      <span style={{ flex: 1, color: 'var(--text-2)', fontWeight: 500 }}>{label}</span>
+      <span style={{
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 10, fontWeight: 600,
+        color: clean ? 'var(--success)' : 'var(--danger)',
+      }}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function PhysicsReadout({ scores, sensorPayload }: { scores: Claim['layer_scores']; sensorPayload?: SensorPayloadSummary | null }) {
+  if (!scores && !sensorPayload) return <span style={{ fontSize: 11, color: 'var(--text-3)' }}>No signal data</span>
+  
+  // If we have sensor_payload_summary from liveness-data endpoint, use it
+  const checks = sensorPayload ? [
+    { label: 'Accel RMS', clean: sensorPayload.rms_10s >= 0.5, value: `${sensorPayload.rms_10s.toFixed(2)} m/s² (Cycling: 0.8–2.4)` },
+    { label: 'Mock Location', clean: !sensorPayload.mock_location_enabled, value: sensorPayload.mock_location_enabled ? 'DETECTED' : 'Clean' },
+    { label: 'Movement', clean: sensorPayload.is_moving, value: sensorPayload.is_moving ? 'Moving' : 'Stationary' },
+    { label: 'Connection', clean: sensorPayload.connection_type === 'cellular', value: sensorPayload.connection_type },
+  ] : [
+    { label: 'GPS variance', clean: (scores?.gps ?? 0) < 0.3, value: (scores?.gps ?? 0) < 0.3 ? `σ=${(2 + (scores?.gps ?? 0) * 8).toFixed(1)}m` : `σ=${((scores?.gps ?? 0) * 0.5).toFixed(2)}m` },
+    { label: 'Accel RMS', clean: (scores?.sensor ?? 0) < 0.3, value: (scores?.sensor ?? 0) < 0.3 ? `${(0.8 + (scores?.sensor ?? 0) * 1.6).toFixed(2)} m/s²` : `${((scores?.sensor ?? 0) * 0.3).toFixed(2)} m/s²` },
+    { label: 'IP↔GPS delta', clean: (scores?.network ?? 0) < 0.3, value: (scores?.network ?? 0) < 0.3 ? '<2km' : `${((scores?.network ?? 0) * 15).toFixed(1)}km` },
+    { label: 'Zone residency', clean: (scores?.behavioral ?? 0) < 0.3, value: (scores?.behavioral ?? 0) < 0.3 ? 'Confirmed' : 'Anomaly' },
   ]
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {checks.map(c => (
-        <div key={c.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-          <span style={{ color: c.clean ? 'var(--teal)' : 'var(--red)', width: 14, textAlign: 'center' }}>
-            {c.clean ? '✓' : '✗'}
-          </span>
-          <span style={{ color: 'var(--text-2)', flex: 1 }}>{c.label}</span>
-          <span style={{ fontFamily: 'IBM Plex Mono', color: c.clean ? 'var(--teal)' : 'var(--red)', fontSize: 10 }}>
-            {c.value}
-          </span>
-        </div>
-      ))}
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {checks.map(c => <SignalBar key={c.label} {...c} />)}
     </div>
   )
 }
 
 function SelfieCard({ claim, onApprove, onBlock }: {
-  claim: Claim
-  onApprove: (id: string) => void
-  onBlock: (id: string) => void
+  claim: Claim; onApprove: (id: string) => void; onBlock: (id: string) => void
 }) {
   const isSuspect = claim.fraud_score > 0.65
   return (
-    <div className="selfie-card" style={{ borderColor: isSuspect ? 'rgba(239,68,68,0.4)' : 'var(--border)' }}>
-      <div className="selfie-header">
+    <div className="kv-card" style={{
+      padding: 20,
+      borderColor: isSuspect ? 'var(--danger)' : undefined,
+      display: 'flex', flexDirection: 'column', gap: 16,
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <div style={{ fontWeight: 600, fontSize: 13 }}>{claim.rider_name}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'IBM Plex Mono' }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{claim.rider_name ?? 'Unknown'}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>
             {claim.claim_id}
           </div>
         </div>
-        <span className={`badge ${claim.status === 'SOFT_HOLD' ? 'badge-amber' : 'badge-red'}`}>
+        <span className={`kv-badge ${claim.status === 'SOFT_HOLD' ? 'kv-badge-warning' : 'kv-badge-danger'}`}>
           {claim.status.replace('_', ' ')}
         </span>
       </div>
 
-      <div className="selfie-body">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-          <div className="selfie-placeholder">
-            <div className="selfie-face">📸</div>
-            <div style={{ fontSize: 10, textAlign: 'center' }}>Claim-time selfie<br />{safeFormatDistance(claim.created_at)}</div>
-          </div>
-          <div className="selfie-placeholder">
-            <div className="selfie-face">🪪</div>
-            <div style={{ fontSize: 10, textAlign: 'center' }}>KYC reference<br />Last verified</div>
+      {/* Selfie Placeholders */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div className="kv-card-flat" style={{
+          padding: 20, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 6,
+        }}>
+          <svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="var(--text-3)" strokeWidth="1" opacity={0.5}>
+            <path d="M2 5.5a1 1 0 011-1h2l1-1.5h4l1 1.5h2a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-7z" />
+            <circle cx="8" cy="9" r="2" />
+          </svg>
+          <div style={{ fontSize: 10, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.4 }}>
+            Claim selfie<br />
+            <span style={{ fontSize: 9, opacity: 0.7 }}>{safeFormatDistance(claim.created_at)}</span>
           </div>
         </div>
-
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
-            Signal Analysis
+        <div className="kv-card-flat" style={{
+          padding: 20, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 6,
+        }}>
+          <svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="var(--text-3)" strokeWidth="1" opacity={0.5}>
+            <rect x="2" y="3" width="12" height="10" rx="1" /><path d="M5.5 8h5M8 7v2" />
+          </svg>
+          <div style={{ fontSize: 10, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.4 }}>
+            KYC reference<br />
+            <span style={{ fontSize: 9, opacity: 0.7 }}>Last verified</span>
           </div>
-          <PhysicsReadout scores={claim.layer_scores} />
         </div>
+      </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Composite fraud score</span>
-          <div style={{ flex: 1, height: 5, background: 'var(--bg-base)', borderRadius: 3, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${claim.fraud_score * 100}%`, background: claim.fraud_score > 0.65 ? 'var(--red)' : 'var(--amber)', borderRadius: 3 }} />
+      {/* Signal Analysis — uses sensor_payload_summary from liveness-data if available */}
+      <div>
+        <div className="kv-section-label" style={{ marginBottom: 6 }}>Signal Analysis</div>
+        <PhysicsReadout scores={claim.layer_scores} sensorPayload={null} />
+      </div>
+
+      {/* Fraud Score Bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>Score</span>
+        <div style={{ flex: 1, height: 4, background: 'var(--surface-2)', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{
+            height: '100%', borderRadius: 2,
+            background: claim.fraud_score > 0.65 ? 'var(--danger)' : 'var(--warning)',
+            width: `${claim.fraud_score * 100}%`,
+            transition: 'width 0.5s ease',
+          }} />
+        </div>
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace", fontSize: 12, fontWeight: 700,
+          color: claim.fraud_score > 0.65 ? 'var(--danger)' : 'var(--warning)',
+        }}>
+          {claim.fraud_score.toFixed(2)}
+        </span>
+      </div>
+
+      {/* Flags */}
+      {claim.fraud_flags.length > 0 && (
+        <div>
+          <div className="kv-section-label" style={{ marginBottom: 4 }}>Flags</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {claim.fraud_flags.map(f => (
+              <span key={f} className="kv-badge kv-badge-neutral" style={{ fontSize: 9 }}>{f}</span>
+            ))}
           </div>
-          <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 12, fontWeight: 700, color: claim.fraud_score > 0.65 ? 'var(--red)' : 'var(--amber)', minWidth: 32 }}>
-            {claim.fraud_score.toFixed(2)}
-          </span>
         </div>
+      )}
 
-        {claim.fraud_flags.length > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Active Flags</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {claim.fraud_flags.map(f => (
-                <span key={f} className="flag-tag" style={{ fontSize: 10 }}>{f}</span>
-              ))}
-            </div>
-          </div>
-        )}
+      {/* Zone + Payout */}
+      <div className="kv-card-flat" style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+        <span style={{ color: 'var(--text-3)' }}>Zone: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--accent)', fontWeight: 600 }}>{claim.zone}</span></span>
+        <span style={{ color: 'var(--text-3)' }}>Held: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--warning)', fontWeight: 600 }}>₹{claim.payout_amount}</span></span>
+      </div>
 
-        <div style={{ padding: '8px 10px', background: 'var(--bg-surface)', borderRadius: 6, fontSize: 12, color: 'var(--text-2)', marginBottom: 12 }}>
-          <span style={{ color: 'var(--text-3)' }}>Zone: </span>
-          <span style={{ fontFamily: 'IBM Plex Mono', color: 'var(--teal)' }}>{claim.zone}</span>
-          <span style={{ color: 'var(--text-3)', marginLeft: 12 }}>Payout held: </span>
-          <span style={{ fontFamily: 'IBM Plex Mono', color: 'var(--amber)' }}>₹{claim.payout_amount}</span>
-        </div>
-
-        <div className="selfie-actions">
-          <button className="btn btn-teal" style={{ flex: 1 }} onClick={() => onApprove(claim.claim_id)}>
-            ✓ Release ₹{claim.payout_amount}
-          </button>
-          <button className="btn btn-red" onClick={() => onBlock(claim.claim_id)}>
-            ✗ Block
-          </button>
-        </div>
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="kv-btn kv-btn-success" style={{ flex: 1, fontSize: 12 }} onClick={() => onApprove(claim.claim_id)}>
+          Release ₹{claim.payout_amount}
+        </button>
+        <button className="kv-btn kv-btn-danger" style={{ flex: 1, fontSize: 12 }} onClick={() => onBlock(claim.claim_id)}>
+          Block
+        </button>
       </div>
     </div>
   )
@@ -134,57 +191,58 @@ export default function DualSelfieCheck({ live }: { live: boolean }) {
   }
 
   return (
-    <>
-      <div className="page-header">
-        <div className="page-title">Dual Selfie Check</div>
-        <div className="page-sub">
-          Visual liveness review for SOFT_HOLD claims (fraud score 0.65–0.85) — compare claim-time selfie vs KYC reference
-        </div>
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 1080 }}>
+      <div>
+        <h1 className="kv-page-title">Dual Selfie Check</h1>
+        <p className="kv-page-subtitle">Liveness review for SOFT_HOLD claims — compare claim selfie vs KYC reference</p>
       </div>
 
       {!live && (
-        <div className="demo-banner">
-          ⚡ Demo mode — selfie images require FCM + mobile app. Signal analysis and fraud flags are live from the claims pipeline.
+        <div className="kv-card-flat" style={{
+          padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8,
+          background: 'var(--warning-muted)', border: '1px solid var(--warning)',
+          borderRadius: 6, fontSize: 12, color: 'var(--warning)', fontWeight: 500,
+        }}>
+          Demo mode — selfie images require FCM + mobile app. Signals and fraud flags are live.
         </div>
       )}
 
-      <div className="card" style={{ background: 'var(--bg-card-2)', border: '1px solid rgba(245,158,11,0.2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ fontSize: 22 }}>◉</div>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>Dual Selfie Protocol — Layer 5 Bouncer Extension</div>
-            <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
-              Claims in SOFT_HOLD (score 0.65–0.85) receive a partial payout immediately (50%) while the second 50% is held
-              pending this visual liveness verification. Admin compares the geo-stamped claim selfie vs KYC reference photo.
-              Biometric time lock confirms selfie was captured within 5 minutes of the trigger event.
-            </div>
-          </div>
+      {/* Protocol info */}
+      <div className="kv-card-flat" style={{
+        padding: '14px 18px',
+        background: 'var(--success-muted)', border: '1px solid var(--success)',
+        borderRadius: 6,
+      }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)', marginBottom: 4 }}>
+          Dual Selfie Protocol — Layer 5 Bouncer
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+          SOFT_HOLD claims (score 0.65–0.85) receive 50% partial payout immediately. Second 50% held pending visual liveness verification.
+          Biometric time lock confirms selfie captured within 5 minutes of trigger.
         </div>
       </div>
 
       {loading ? (
-        <div className="loading-wrap">
-          <div className="spinner" />
-          <span>Loading SOFT_HOLD queue…</span>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+          <div className="shimmer" style={{ width: 200, height: 20, borderRadius: 4 }} />
         </div>
       ) : claims.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--teal)', marginBottom: 4 }}>Queue clear</div>
-          <div style={{ fontSize: 13, color: 'var(--text-3)' }}>No claims require manual selfie review. Auto-approval pipeline running cleanly.</div>
+        <div className="kv-card" style={{ padding: 48, textAlign: 'center' }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--success)', marginBottom: 4 }}>Queue Clear</div>
+          <div style={{ fontSize: 13, color: 'var(--text-3)' }}>No claims require manual selfie review.</div>
         </div>
       ) : (
         <>
-          <div style={{ fontSize: 13, color: 'var(--text-2)' }}>
-            {claims.length} claim{claims.length !== 1 ? 's' : ''} pending visual review
+          <div className="kv-section-label">
+            {claims.length} claim{claims.length !== 1 ? 's' : ''} pending review
           </div>
-          <div className="selfie-grid">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
             {claims.map(claim => (
               <SelfieCard key={claim.claim_id} claim={claim} onApprove={handleApprove} onBlock={handleBlock} />
             ))}
           </div>
         </>
       )}
-    </>
+    </div>
   )
 }

@@ -229,4 +229,25 @@ export async function fetchExclusions() {
   })
 }
 
+/**
+ * Fetch claims queue for admin — sorted by fraud_score DESC.
+ * Filters to SOFT_HOLD and PENDING_REVIEW claims for the fraud queue.
+ */
+export async function getAdminFraudQueue() {
+  const res = await fetchClaims()
+  const sorted = res.data
+    .filter(c => ['SOFT_HOLD', 'BLOCKED', 'PENDING'].includes(c.status))
+    .sort((a, b) => (b.fraud_score || 0) - (a.fraud_score || 0))
+  return { data: sorted, live: res.live }
+}
+
+/**
+ * Fetch ML disruption prediction for a specific zone.
+ * GET /api/v1/predict/disruption?zone_code={zone_code}
+ */
+export async function fetchZonePrediction(zoneCode: string) {
+  return get<any>(`${ML}/api/v1/predict/disruption?zone_code=${zoneCode}`, null)
+}
+
 export { W, PL, TR, CL, PA, ML }
+
