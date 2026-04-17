@@ -523,7 +523,7 @@ curl -s https://kavachai-ml-service-production.up.railway.app/health | python3 -
 
 **2. Vercel Hosted Admin Dashboard:**
 > Visit [https://kavachai-admin.vercel.app](https://kavachai-admin.vercel.app)
->   *   *Login:* Use passcode `kavach2026`
+>   *   *Login:* Use ID `admin` and Passcode `kavach2026`
 >   *   Navigate to Fraud Queue, SHAP Explainer, Zone Heatmap, and Actuarial Dashboard to see live Railway backend metrics.
 
 **3. React Native Worker App (Mobile Experience):**
@@ -590,7 +590,7 @@ You are looking for every service to return `"status": "healthy"`.
 
 Before running transactions, you can visually inspect the infrastructure:
 *   **Admin Dashboard (Phase 3 Command Center):** `http://localhost:3000` (started via docker-compose)
-    *   *Login:* Use passcode `kavach2026`
+    *   *Login:* Use ID `admin` and Passcode `kavach2026`
     *   *Alternative Local Startup:* If not using Docker for the frontend, run `cd admin-dashboard && npm install && npm run dev`
 *   **Redpanda Console (Message Broker GUI):** `http://localhost:8080`
     *   *Verify the topics exist:* `raw.trigger.events`, `processed.trigger.events`, `claims.approved`
