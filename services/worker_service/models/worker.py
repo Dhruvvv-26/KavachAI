@@ -5,7 +5,7 @@ Mirrors the tables defined in migrations/01_init.sql.
 import uuid
 from datetime import datetime, timezone
 
-from geoalchemy2 import Geometry
+
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, DateTime, Enum,
     ForeignKey, Integer, Numeric, String, Text,
@@ -24,7 +24,7 @@ class Zone(Base):
     zone_name       = Column(String(100), nullable=False)
     city            = Column(String(50), nullable=False, index=True)
     geohash         = Column(String(12), index=True)
-    boundary        = Column(Geometry("POLYGON", srid=4326), nullable=False)
+    boundary        = Column(Text, nullable=False)
     risk_multiplier = Column(Numeric(4, 2), nullable=False, default=1.0)
     is_active       = Column(Boolean, nullable=False, default=True)
     created_at      = Column(
@@ -58,7 +58,7 @@ class Worker(Base):
                                         name="kyc_status"), nullable=False, default="pending")
     device_fingerprint    = Column(String(128))
     upi_id                = Column(Text)  # Fernet encrypted
-    work_location         = Column(Geometry("POINT", srid=4326))
+    work_location         = Column(Text)
     zone_id               = Column(UUID(as_uuid=True), ForeignKey("zones.id"))
     primary_zone_id       = Column(UUID(as_uuid=True), ForeignKey("zones.id"))
     is_active             = Column(Boolean, nullable=False, default=True)
@@ -90,7 +90,7 @@ class GpsPing(Base):
 
     id          = Column(Integer, primary_key=True, autoincrement=True)
     worker_id   = Column(UUID(as_uuid=True), ForeignKey("workers.id", ondelete="CASCADE"), nullable=False)
-    location    = Column(Geometry("POINT", srid=4326), nullable=False)
+    location    = Column(Text, nullable=False)
     accuracy_m  = Column(Numeric(8, 2))
     speed_kmh   = Column(Numeric(6, 2))
     altitude_m  = Column(Numeric(8, 2))
