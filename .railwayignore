@@ -1,0 +1,5 @@
+.git/
+.venv/
+worker-app/
+admin-dashboard/
+__pycache__/

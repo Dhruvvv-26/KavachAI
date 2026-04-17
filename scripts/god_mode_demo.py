@@ -34,8 +34,20 @@ import psycopg2
 import requests
 import sys
 import time
+import socket
 from datetime import datetime
 from typing import Optional
+
+# --- DNS BYPASS MONKEY PATCH ---
+# Fixes ISP/Local DNS resolution timeouts for Railway domains
+_orig_getaddrinfo = socket.getaddrinfo
+def _patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    if host.endswith(".up.railway.app"):
+        # Intercept and return the known fastly edge IP for Railway
+        return _orig_getaddrinfo("151.101.2.15", port, family, type, proto, flags)
+    return _orig_getaddrinfo(host, port, family, type, proto, flags)
+socket.getaddrinfo = _patched_getaddrinfo
+# -------------------------------
 
 BASE_URLS = {
     "worker":  "http://localhost:8001",
@@ -44,6 +56,17 @@ BASE_URLS = {
     "claims":  "http://localhost:8004",
     "payment": "http://localhost:8005",
     "risk":    "http://localhost:8007",
+    "ml":      "http://localhost:8006",
+}
+
+RAILWAY_URLS = {
+    "worker":  "https://worker-service-production-95dc.up.railway.app",
+    "policy":  "https://policy-service-production-d88e.up.railway.app",
+    "trigger": "https://trigger-engine-production.up.railway.app",
+    "claims":  "https://claims-service-production-ee3e.up.railway.app",
+    "payment": "https://payment-service-production-c487.up.railway.app",
+    "risk":    "https://ml-service-production-0a98.up.railway.app", # Routed through ML usually
+    "ml":      "https://ml-service-production-0a98.up.railway.app",
 }
 
 DB_CONFIG = {
@@ -52,6 +75,14 @@ DB_CONFIG = {
     "dbname": "kavachai",
     "user": "kavachai",
     "password": "kavachai_secure_2026",
+}
+
+RAILWAY_DB = {
+    "host": "monorail.proxy.rlwy.net",
+    "port": 53487,
+    "dbname": "railway",
+    "user": "postgres",
+    "password": "gXEDsoUqibzdIJajlUCGZkZovYlbcqaY",
 }
 
 DEMO_WORKER_ID = "6fc7ae56-8cc2-4d32-b8cf-c21844a177ce"
@@ -194,12 +225,12 @@ def cmd_seed(args):
                 cur.execute("""
                     INSERT INTO policies (
                         id, worker_id, zone_id, coverage_tier, status,
-                        weekly_premium, max_payout_per_event, max_payout_per_week,
-                        coverage_start, coverage_end
+                        weekly_premium, premium_amount, max_payout_per_event, max_payout_per_week,
+                        coverage_start, coverage_end, activation_date, expiration_date
                     )
                     VALUES (
                         %s, %s, (SELECT id FROM zones WHERE zone_code = %s LIMIT 1), 'standard', 'active',
-                        127.00, 500.00, 1500.00, NOW(), NOW() + INTERVAL '7 days'
+                        127.00, 127.00, 500.00, 1500.00, NOW(), NOW() + INTERVAL '7 days', NOW(), NOW() + INTERVAL '7 days'
                     )
                 """, (DEMO_POLICY_ID, DEMO_WORKER_ID, DEMO_ZONE))
     except Exception as e:
@@ -370,7 +401,14 @@ if __name__ == "__main__":
     parser_f = subparsers.add_parser("fraud")
     parser_f.add_argument("--scenario", choices=["ring_attack", "gps_spoof", "genuine_rider"], required=True)
     
+    # Global args
+    parser.add_argument("--env", choices=["local", "railway"], default="local", help="Target environment")
+    
     args = parser.parse_args()
+    
+    if args.env == "railway":
+        BASE_URLS.update(RAILWAY_URLS)
+        DB_CONFIG.update(RAILWAY_DB)
     
     if args.command == "status":
         cmd_status(args)

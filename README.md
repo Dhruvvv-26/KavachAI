@@ -494,40 +494,46 @@ Zone:       delhi_rohini  |  centroid lat=28.7300, lon=77.1150
 | E2E Testing & Logs | Full end-to-end `docker compose` execution passing; Failure/Diagnosis logs documented | ✅ Complete |
 | NetworkX Louvain clique detection | 150+ rider fraud ring identified within 30s of burst submission | ✅ Live |
 | Additional LSTM training data | 3 years historical CPCB + OpenWeatherMap; test AUC > 0.95 per zone | ✅ Complete |
-| Railway.app + Vercel deployment | Public HTTPS URL; judges run without local setup | 🔄 Pending |
-| 5-minute pitch video + final deck | Recorded E2E: trigger → fraud check → payout on physical phone | 🔄 Pending |
+| Railway.app + Vercel deployment | Public HTTPS URL; judges run without local setup | ✅ Complete |
+| 5-minute pitch video + final deck | Recorded E2E: trigger → fraud check → payout on physical phone | ✅ Complete |
 
 ---
 
-## 9. 🚀 How to Run — Judges Evaluation Guide
+## 9. 🚀 Source Code & How to Run — Judges Evaluation Guide
 
-> **No cloud sprawl.** The entire architecture runs locally. No AWS/GCP IAM roles. No billing surprises. 100% free external APIs — OpenWeatherMap, CPCB India (government, no rate limit), NDMA RSS. Everything below executes on your machine.
+> **Hackathon Requirement: "Source Code(Ofcourse Git) – Provide complete source code along with dependencies and clear instructions to run the solution locally, or share a packaged/hosted version of your application."**
+> 
+> - ✅ **Complete Source Code & Dependencies:** The GitHub repository contains the full 13-container architecture (microservices + ML models), React Native Worker App, and React Admin Dashboard. All dependencies are configured via `docker-compose.yml`, `requirements.txt`, and `package.json`.
+> - ✅ **Packaged/Hosted Version:** The system is fully deployed on Railway (backend) and Vercel (frontend) for zero-setup evaluation.
+> - ✅ **Local Execution:** Clear, step-by-step instructions to run the entire distributed system locally are provided below.
 
-### 🌐 Option A — Zero Setup (Public URLs)
+### 🌐 Option A — Packaged / Hosted Version (Zero Setup)
 
-> **For judges who want to evaluate immediately without installing anything.** All 6 microservices are deployed on Railway.app and the admin dashboard is on Vercel.
+Our complete application is hosted securely and accessible globally. The 6 FastAPI microservices are deployed on Railway.app and the React Admin Dashboard is on Vercel. 
 
+**1. Railway Hosted Microservices (Backend):**
 See [PUBLIC_URLS.md](./PUBLIC_URLS.md) for the full service URL table.
 
 ```bash
-# Quick health check — all 6 services
+# Quick health check — Worker Service and ML Service
 curl -s https://kavachai-worker-service-production.up.railway.app/health | python3 -m json.tool
 curl -s https://kavachai-ml-service-production.up.railway.app/health | python3 -m json.tool
 # Expected: {"status":"healthy","models_loaded":11}
-
-# Demo endpoints
-curl -s https://kavachai-worker-service-production.up.railway.app/api/v1/riders/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce | python3 -m json.tool
-curl -s https://kavachai-policy-service-production.up.railway.app/api/v1/policies/exclusions/reference | python3 -m json.tool
-curl -s https://kavachai-payment-service-production.up.railway.app/api/v1/payments/summary | python3 -m json.tool
 ```
 
-> **Admin Dashboard (Vercel)**: Visit [https://kavachai-admin.vercel.app](https://kavachai-admin.vercel.app)
+**2. Vercel Hosted Admin Dashboard:**
+> Visit [https://kavachai-admin.vercel.app](https://kavachai-admin.vercel.app)
 >   *   *Login:* Use passcode `kavach2026`
->   *   Navigate to Fraud Queue, SHAP Explainer, Zone Heatmap, and Actuarial Dashboard.
+>   *   Navigate to Fraud Queue, SHAP Explainer, Zone Heatmap, and Actuarial Dashboard to see live Railway backend metrics.
 
-### 🐳 Option B — Full Local Setup (Docker)
+**3. React Native Worker App (Mobile Experience):**
+> If you want to evaluate the full end-to-end mobile experience (Expo, background sensor payloads, Firebase notifications), please follow our dedicated **[Worker App Demo Guide](WORKER_APP_DEMO.md)**. It walks you through connecting your physical iOS/Android device to evaluate the application live.
 
-### Prerequisites
+### 🐳 Option B — Complete Local Execution (Docker)
+
+> **No cloud sprawl.** The entire architecture runs locally on your machine with 100% free external APIs — OpenWeatherMap, CPCB India, NDMA RSS.
+
+#### Prerequisites
 
 ```bash
 # Required
@@ -542,7 +548,7 @@ Git                           → git-scm.com
 docker --version && python3 --version
 ```
 
-### Step 1 — Clone & Configure
+#### Step 1 — Clone the Source Code & Configure Dependencies
 
 ```bash
 git clone https://github.com/Dhruvvv-26/KavachAI.git
@@ -550,14 +556,11 @@ cd KavachAI
 cp .env.example .env
 ```
 
-To securely evaluate the platform with our active API limits and production accounts, please download the required `.env` files from this **[Google Drive Folder](https://drive.google.com/drive/folders/11GOPV4GXGVU-OUgfGVSNTWUiPq_8c8MS?usp=drive_link)** instead of using the `.example` files.
+To securely evaluate the platform locally with our active API limits and production accounts, please download the required `.env` files from this **[Google Drive Folder](https://drive.google.com/drive/folders/11GOPV4GXGVU-OUgfGVSNTWUiPq_8c8MS?usp=drive_link)**.
 
 > 🔐 **How to apply the Judge Secrets:**
-> 1. Download `backend_env_secrets.txt` and rename it to `.env` in the root folder (i.e. `KavachAI/.env`).
-> 2. Download `worker_app_env_secrets.txt` and rename it to `.env` inside the frontend folder (i.e. `KavachAI/worker-app/.env`).
-
-> 📱 **Running the React Native Worker App (Physical Device)**
-> If you want to evaluate the full end-to-end mobile experience (Expo, background sensor payloads, Firebase notifications), please follow our dedicated **[Worker App Demo Guide](WORKER_APP_DEMO.md)**. It walks you through matching your LAN IPs and running the `worker-app` natively so that you can follow along with simulated payouts on your own phone.
+> 1. Download `backend_env_secrets.txt` and rename it to `.env` in the root folder (`KavachAI/.env`).
+> 2. Download `worker_app_env_secrets.txt` and rename it to `.env` inside the frontend folder (`KavachAI/worker-app/.env`).
 
 ### Step 2 — Build and Start the Stack
 
@@ -956,6 +959,7 @@ KavachAI/
 
 - **YouTube (unlisted demo phase 1):** [https://youtu.be/SvxXVfBaTIo](https://youtu.be/SvxXVfBaTIo)
 - **YouTube (unlisted demo phase 2):** [https://youtu.be/GdeHh-Ret28](https://youtu.be/GdeHh-Ret28)
+- **YouTube (unlisted demo phase 3):** [https://youtu.be/KZMFj5DhL1M](https://youtu.be/KZMFj5DhL1M)
 - **Google Drive — Video:** [Drive Link](https://drive.google.com/file/d/11p0Qzj3ejJncH5XmLfBNeYFsZHFOMOC2/view?usp=sharing)
 - **Google Drive — Submission Folder:** [Drive Link](https://drive.google.com/drive/folders/1SG2l1yzUukmBRNj9vXgMjR7wZiv5MTma?usp=sharing)
 - **GitHub:** [https://github.com/Dhruvvv-26/KavachAI.git](https://github.com/Dhruvvv-26/KavachAI.git)
@@ -996,9 +1000,9 @@ KavachAI/
 - [x] Admin Dashboard live at http://localhost:3000 — 5 panels: Live Metrics, Fraud Queue, SHAP, Zone Heatmap, Dual Selfie
 - [x] NetworkX Louvain detection: POST /api/v1/clique/run returns ring alert within 30s
 - [x] 13 Docker containers — admin-dashboard added to docker-compose.yml
-- [ ] Railway + Vercel deployment — public HTTPS URLs in submission links
+- [x] Railway + Vercel deployment — public HTTPS URLs in submission links
 - [x] Premium inconsistency resolved — ₹127/week canonical across all documents
-- [ ] Demo video Phase 3 — E2E on physical phone, 3 scenarios
+- [x] Demo video Phase 3 — E2E on physical phone, 3 scenarios
 
 **Submission artifacts:**
 

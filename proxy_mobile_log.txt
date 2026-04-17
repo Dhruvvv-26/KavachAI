@@ -1,0 +1,75 @@
+============================================================
+🚀 KavachAI Mobile Proxy (Railway via LAN)
+============================================================
+
+Your iPhone can reach these at http://172.20.10.2:900X
+
+
+============================================================
+Proxy running! Keep this terminal open.
+============================================================
+  ✅ :9002  →  policy-service-production-d88e.up.railway.app
+  ✅ :9006  →  ml-service-production-0a98.up.railway.app
+  ✅ :9001  →  worker-service-production-95dc.up.railway.app
+  ✅ :9004  →  claims-service-production-ee3e.up.railway.app
+  ✅ :9003  →  trigger-engine-production.up.railway.app
+  ✅ :9005  →  payment-service-production-c487.up.railway.app
+  [9001→worker-service-production-95dc.up.railway.app] "GET /health HTTP/1.1" 200 -
+  [9002→policy-service-production-d88e.up.railway.app] "GET /api/v1/policies/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9006→ml-service-production-0a98.up.railway.app] "GET /api/v1/predict/disruptions/active HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9001→worker-service-production-95dc.up.railway.app] "GET /api/v1/riders/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9003→trigger-engine-production.up.railway.app] "GET /api/v1/trigger/status HTTP/1.1" 200 -
+  [9006→ml-service-production-0a98.up.railway.app] "GET /api/v1/predict/disruptions/active HTTP/1.1" 200 -
+  [9002→policy-service-production-d88e.up.railway.app] "GET /api/v1/policies/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9001→worker-service-production-95dc.up.railway.app] "GET /api/v1/riders/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9003→trigger-engine-production.up.railway.app] "GET /api/v1/trigger/status HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9006→ml-service-production-0a98.up.railway.app] "GET /api/v1/predict/disruptions/active HTTP/1.1" 200 -
+  [9003→trigger-engine-production.up.railway.app] "GET /api/v1/trigger/status HTTP/1.1" 200 -
+  [9002→policy-service-production-d88e.up.railway.app] "GET /api/v1/policies/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9001→worker-service-production-95dc.up.railway.app] "GET /api/v1/riders/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9002→policy-service-production-d88e.up.railway.app] "GET /api/v1/policies/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9006→ml-service-production-0a98.up.railway.app] "GET /api/v1/predict/disruptions/active HTTP/1.1" 200 -
+  [9001→worker-service-production-95dc.up.railway.app] "GET /api/v1/riders/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9003→trigger-engine-production.up.railway.app] "GET /api/v1/trigger/status HTTP/1.1" 200 -
+  [9005→payment-service-production-c487.up.railway.app] "GET /api/v1/payments/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9001→worker-service-production-95dc.up.railway.app] "GET /api/v1/riders/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9002→policy-service-production-d88e.up.railway.app] "GET /api/v1/policies/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9006→ml-service-production-0a98.up.railway.app] "GET /api/v1/predict/disruptions/active HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9003→trigger-engine-production.up.railway.app] "GET /api/v1/trigger/status HTTP/1.1" 200 -
+  [9001→worker-service-production-95dc.up.railway.app] "GET /api/v1/riders/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9006→ml-service-production-0a98.up.railway.app] "POST /api/v1/premium/calculate HTTP/1.1" 200 -
+  [9005→payment-service-production-c487.up.railway.app] "GET /api/v1/payments/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9002→policy-service-production-d88e.up.railway.app] "GET /api/v1/policies/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9001→worker-service-production-95dc.up.railway.app] "GET /api/v1/riders/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9006→ml-service-production-0a98.up.railway.app] "GET /api/v1/predict/disruptions/active HTTP/1.1" 200 -
+  [9003→trigger-engine-production.up.railway.app] "GET /api/v1/trigger/status HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9006→ml-service-production-0a98.up.railway.app] "GET /api/v1/predict/disruptions/active HTTP/1.1" 200 -
+  [9005→payment-service-production-c487.up.railway.app] "GET /api/v1/payments/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9001→worker-service-production-95dc.up.railway.app] "GET /api/v1/riders/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9003→trigger-engine-production.up.railway.app] "GET /api/v1/trigger/status HTTP/1.1" 200 -
+  [9002→policy-service-production-d88e.up.railway.app] "GET /api/v1/policies/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9006→ml-service-production-0a98.up.railway.app] "GET /api/v1/predict/disruptions/active HTTP/1.1" 200 -
+  [9002→policy-service-production-d88e.up.railway.app] "GET /api/v1/policies/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9001→worker-service-production-95dc.up.railway.app] "GET /api/v1/riders/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9003→trigger-engine-production.up.railway.app] "GET /api/v1/trigger/status HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9005→payment-service-production-c487.up.railway.app] "GET /api/v1/payments/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9006→ml-service-production-0a98.up.railway.app] "GET /api/v1/predict/disruptions/active HTTP/1.1" 200 -
+  [9002→policy-service-production-d88e.up.railway.app] "GET /api/v1/policies/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9001→worker-service-production-95dc.up.railway.app] "GET /api/v1/riders/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9003→trigger-engine-production.up.railway.app] "GET /api/v1/trigger/status HTTP/1.1" 200 -
+  [9004→claims-service-production-ee3e.up.railway.app] "GET /api/v1/claims/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9005→payment-service-production-c487.up.railway.app] "GET /api/v1/payments/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -
+  [9002→policy-service-production-d88e.up.railway.app] "GET /api/v1/policies/worker/6fc7ae56-8cc2-4d32-b8cf-c21844a177ce HTTP/1.1" 200 -

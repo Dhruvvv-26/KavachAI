@@ -45,3 +45,10 @@ Thumbs.db
 
 # ── Safe Secrets for Judges ─────────────────────────────────
 *_secrets.txt
+
+# ── Docs ───────────────────────────────────────────────────
+docs/*
+!docs/verification/
+docs/verification/*
+!docs/verification/FINAL_PROJECT_DEMO.md
+scratch/

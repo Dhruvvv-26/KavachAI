@@ -1,20 +1,23 @@
 {
   "buildCommand": "npm run build",
+  "installCommand": "npm ci",
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/:path((?!api).*)",
       "destination": "/index.html"
     }
   ],
-  "env": {
-    "VITE_WORKER_URL": "https://placeholder.railway.app",
-    "VITE_POLICY_URL": "https://placeholder.railway.app",
-    "VITE_TRIGGER_URL": "https://placeholder.railway.app",
-    "VITE_CLAIMS_URL": "https://placeholder.railway.app",
-    "VITE_PAYMENT_URL": "https://placeholder.railway.app",
-    "VITE_ML_URL": "https://placeholder.railway.app",
-    "VITE_DEMO_MODE": "false"
-  }
+  "headers": [
+    {
+      "source": "/assets/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ]
 }
