@@ -873,7 +873,7 @@ The dashboard integrates directly with the 6 FastAPI microservices. A fallback d
 | Govt Alerts | NDMA + IMD RSS | ✅ Live — Flood, cyclone, heatwave alerts |
 | Observability | Prometheus + Grafana | ✅ Live — metrics on :9090, dashboards on :3001 |
 | Containers | Docker Compose | ✅ Live — 12-container orchestration |
-| Hosting | Railway.app + Vercel | 🔄 Phase 3 pending |
+| Hosting | Railway.app + Vercel | ✅ Live — Phase 3 complete |
 
 ---
 
